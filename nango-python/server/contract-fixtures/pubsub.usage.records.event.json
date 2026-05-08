@@ -1,0 +1,17 @@
+{
+    "idempotencyKey": "usage-records-1",
+    "subject": "usage",
+    "type": "usage.records",
+    "payload": {
+        "value": 3,
+        "properties": {
+            "accountId": 1,
+            "environmentId": 2,
+            "integrationId": "github",
+            "connectionId": "conn-1",
+            "model": "Issue"
+        }
+    },
+    "source": "contract-fixture",
+    "createdAt": "2025-01-02T03:04:05Z"
+}

@@ -1,0 +1,10 @@
+{
+    "description": "Stable metadata for incoming webhook HMAC compatibility checks.",
+    "body": "{\"type\":\"sync\",\"success\":true}",
+    "secret": "fixture-secret",
+    "headers": {
+        "X-Nango-Hmac-Sha256": "f4bf970271c2b86d6d1fc26aa878b6b895bf40a8410fbccd1a8403b41af846d2",
+        "X-Nango-Signature": "a3758039aa50ddeded4a0bdabd5e6776ba9df7ec14e6346400cbaa6ffde7a9e5"
+    },
+    "algorithm": "HMAC-SHA256"
+}

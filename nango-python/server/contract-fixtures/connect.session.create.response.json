@@ -1,0 +1,7 @@
+{
+    "data": {
+        "token": "connect-token",
+        "connect_link": "https://connect.nango.dev/session/connect-token",
+        "expires_at": "2025-01-02T03:04:05Z"
+    }
+}

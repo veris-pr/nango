@@ -1,0 +1,38 @@
+models:
+    GithubIssue:
+        id: string
+        title: string
+        user?: GithubUser
+    GithubUser:
+        id: string
+        name: string
+    CreateIssueInput:
+        title: string
+        body?: string
+integrations:
+    github-demo:
+        syncs:
+            issues:
+                runs: every day
+                description: Sync GitHub issues
+                input: CreateIssueInput
+                output: GithubIssue
+                endpoint: GET /repos/{GithubUser:id}/issues
+                scopes: repo, read:user
+                webhook-subscriptions:
+                    - issues
+        actions:
+            createIssue:
+                input: CreateIssueInput
+                output: GithubIssue
+                endpoint:
+                    method: POST
+                    path: /repos/issues
+                scopes:
+                    - repo
+        on-events:
+            post-connection-creation:
+                - seedGithub
+            pre-connection-deletion: cleanupGithub
+            validate-connection:
+                - validateGithub

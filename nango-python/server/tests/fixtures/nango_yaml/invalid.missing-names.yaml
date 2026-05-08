@@ -1,0 +1,10 @@
+models: {}
+integrations:
+    '':
+        actions:
+            noop:
+                endpoint: /noop
+    github-demo:
+        actions:
+            '':
+                endpoint: /missing-name

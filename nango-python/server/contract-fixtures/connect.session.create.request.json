@@ -1,0 +1,18 @@
+{
+    "allowed_integrations": ["github"],
+    "end_user": {
+        "id": "user-123",
+        "email": "dev@example.com",
+        "display_name": "Dev User",
+        "tags": {
+            "plan": "internal"
+        }
+    },
+    "organization": {
+        "id": "org-123",
+        "display_name": "Example Org"
+    },
+    "tags": {
+        "source": "fixture"
+    }
+}

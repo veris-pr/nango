@@ -1,0 +1,11 @@
+{
+    "idempotencyKey": "team-1-updated",
+    "subject": "team",
+    "type": "team.updated",
+    "payload": {
+        "id": 1,
+        "name": "Acme"
+    },
+    "source": "contract-fixture",
+    "createdAt": "2025-01-02T03:04:05Z"
+}

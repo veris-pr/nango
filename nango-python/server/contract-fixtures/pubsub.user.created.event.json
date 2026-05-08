@@ -1,0 +1,11 @@
+{
+    "idempotencyKey": "user-1-created",
+    "subject": "user",
+    "type": "user.created",
+    "payload": {
+        "userId": 1,
+        "teamId": 2
+    },
+    "source": "contract-fixture",
+    "createdAt": "2025-01-02T03:04:05Z"
+}
