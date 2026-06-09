@@ -11,6 +11,9 @@ from nango.api.models import (
     DeployValidationData,
     DeployValidationRequest,
     PublicConnection,
+    PublicConnectionEndUser,
+    PublicConnectionEndUserOrganization,
+    PublicConnectionError,
     PublicConnectionFull,
     SyncTriggerRequest,
     TriggerConnectionInput,
@@ -223,6 +226,8 @@ class PublicAPIService:
                 created=connection.created_at,
                 metadata=connection.metadata,
                 provider=providers_by_key[connection.provider_config_key],
+                errors=_public_connection_errors(connection),
+                end_user=_public_connection_end_user(connection),
                 tags=connection.tags,
             )
             for connection in connections
@@ -285,6 +290,8 @@ class PublicAPIService:
             connection_id=connection.connection_id,
             provider_config_key=connection.provider_config_key,
             provider=integration.provider,
+            errors=_public_connection_errors(connection),
+            end_user=_public_connection_end_user(connection),
             tags=connection.tags,
             metadata=connection.metadata,
             connection_config=connection.connection_config,
@@ -413,3 +420,44 @@ def _default_timeouts() -> dict[str, int]:
 
 def _parser_issue_to_api_error(issue: ParserIssue) -> dict[str, object]:
     return {"code": issue.code, "message": issue.message, "path": list(issue.path)}
+
+
+def _public_connection_errors(connection: Connection) -> list[PublicConnectionError]:
+    return [PublicConnectionError(**active_log) for active_log in connection.active_logs]
+
+
+def _public_connection_end_user(connection: Connection) -> PublicConnectionEndUser | None:
+    end_user = connection.end_user
+    if end_user is None:
+        return None
+    end_user_id = end_user.get("end_user_id")
+    if not isinstance(end_user_id, str):
+        return None
+
+    organization_id = end_user.get("organization_id")
+    organization: PublicConnectionEndUserOrganization | None = None
+    if isinstance(organization_id, str):
+        organization = PublicConnectionEndUserOrganization(
+            id=organization_id,
+            display_name=_optional_str_value(end_user.get("organization_display_name")),
+        )
+
+    return PublicConnectionEndUser(
+        id=end_user_id,
+        display_name=_optional_str_value(end_user.get("display_name")),
+        email=_optional_str_value(end_user.get("email")),
+        tags=_optional_string_dict(end_user.get("tags")),
+        organization=organization,
+    )
+
+
+def _optional_str_value(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _optional_string_dict(value: object) -> dict[str, str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        return None
+    return {str(key): item for key, item in value.items() if isinstance(item, str)}

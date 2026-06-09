@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from nango.domain.models import Connection, IntegrationConfig
 from nango.utils.crypto import decrypt_aes_gcm_base64
 
+type ConnectionEndUserRow = dict[str, object]
+type ConnectionActiveLogRow = dict[str, str]
+
 
 class PostgresIntegrationConfigRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -87,8 +90,23 @@ class PostgresConnectionRepository:
                 await session.execute(
                     text(
                         """
-                        SELECT *
+                        SELECT
+                            _nango_connections.*,
+                            row_to_json(end_users.*) AS end_user,
+                            COALESCE(active_logs_agg.active_logs, '[]'::json) AS active_logs
                         FROM _nango_connections
+                        LEFT JOIN end_users ON end_users.id = _nango_connections.end_user_id
+                        LEFT JOIN (
+                            SELECT
+                                connection_id,
+                                json_agg(
+                                    json_build_object('type', type, 'log_id', log_id)
+                                ) AS active_logs
+                            FROM _nango_active_logs
+                            WHERE active = true
+                            GROUP BY connection_id
+                        ) AS active_logs_agg
+                            ON active_logs_agg.connection_id = _nango_connections.id
                         WHERE environment_id = :environment_id
                           AND provider_config_key = :provider_config_key
                           AND connection_id = :connection_id
@@ -132,8 +150,23 @@ class PostgresConnectionRepository:
                 await session.execute(
                     text(
                         f"""
-                        SELECT *
+                        SELECT
+                            _nango_connections.*,
+                            row_to_json(end_users.*) AS end_user,
+                            COALESCE(active_logs_agg.active_logs, '[]'::json) AS active_logs
                         FROM _nango_connections
+                        LEFT JOIN end_users ON end_users.id = _nango_connections.end_user_id
+                        LEFT JOIN (
+                            SELECT
+                                connection_id,
+                                json_agg(
+                                    json_build_object('type', type, 'log_id', log_id)
+                                ) AS active_logs
+                            FROM _nango_active_logs
+                            WHERE active = true
+                            GROUP BY connection_id
+                        ) AS active_logs_agg
+                            ON active_logs_agg.connection_id = _nango_connections.id
                         WHERE environment_id = :environment_id
                           AND deleted = false
                           {where_connection_id}
@@ -181,7 +214,7 @@ def _connection_from_row(
     *,
     encryption_key: str | None,
 ) -> Connection:
-    return Connection(
+    connection = Connection(
         id=_required_int(row, "id"),
         environmentId=_required_int(row, "environment_id"),
         configId=_required_int(row, "config_id"),
@@ -192,9 +225,12 @@ def _connection_from_row(
         metadata=_optional_json_object(row.get("metadata")),
         tags=_string_dict(row.get("tags")),
         lastFetchedAt=_optional_datetime(row, "last_fetched_at"),
+        endUser=_optional_end_user(row.get("end_user")),
+        activeLogs=_active_logs(row.get("active_logs")),
         createdAt=_required_datetime(row, "created_at"),
         updatedAt=_required_datetime(row, "updated_at"),
     )
+    return connection
 
 
 def _required_int(row: Mapping[str, object], key: str) -> int:
@@ -301,3 +337,25 @@ def _string_dict(value: object) -> dict[str, str]:
     if not isinstance(value, Mapping):
         raise RuntimeError("Expected JSON object column")
     return {str(key): item for key, item in value.items() if isinstance(item, str)}
+
+
+def _optional_end_user(value: object) -> ConnectionEndUserRow | None:
+    if value is None:
+        return None
+    return _json_object(value)
+
+
+def _active_logs(value: object) -> list[ConnectionActiveLogRow]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RuntimeError("Expected active logs to be a JSON array")
+    active_logs: list[ConnectionActiveLogRow] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        type_value = item.get("type")
+        log_id_value = item.get("log_id")
+        if isinstance(type_value, str) and isinstance(log_id_value, str):
+            active_logs.append({"type": type_value, "log_id": log_id_value})
+    return active_logs

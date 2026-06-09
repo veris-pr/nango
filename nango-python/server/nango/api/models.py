@@ -35,8 +35,8 @@ class PublicConnectionFull(ContractModel):
     connection_id: str
     provider_config_key: str
     provider: str
-    errors: list[dict[str, str]] = Field(default_factory=list)
-    end_user: dict[str, Any] | None = None
+    errors: list[PublicConnectionError] = Field(default_factory=list)
+    end_user: PublicConnectionEndUser | None = None
     tags: dict[str, str] = Field(default_factory=dict)
     metadata: dict[str, Any] | None = None
     connection_config: dict[str, Any] = Field(default_factory=dict)
@@ -46,6 +46,24 @@ class PublicConnectionFull(ContractModel):
     credentials: dict[str, Any] = Field(default_factory=dict)
 
 
+class PublicConnectionError(ContractModel):
+    type: str
+    log_id: str
+
+
+class PublicConnectionEndUserOrganization(ContractModel):
+    id: str
+    display_name: str | None = None
+
+
+class PublicConnectionEndUser(ContractModel):
+    id: str
+    display_name: str | None = None
+    email: str | None = None
+    tags: dict[str, str] | None = None
+    organization: PublicConnectionEndUserOrganization | None = None
+
+
 class PublicConnection(ContractModel):
     id: int
     connection_id: str
@@ -53,8 +71,8 @@ class PublicConnection(ContractModel):
     created: datetime
     metadata: dict[str, Any] | None = None
     provider: str
-    errors: list[dict[str, str]] = Field(default_factory=list)
-    end_user: dict[str, Any] | None = None
+    errors: list[PublicConnectionError] = Field(default_factory=list)
+    end_user: PublicConnectionEndUser | None = None
     tags: dict[str, str] = Field(default_factory=dict)
 
 
