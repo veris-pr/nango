@@ -344,7 +344,7 @@ class PublicAPIService:
         )
 
     async def trigger_sync(self, request: SyncTriggerRequest) -> tuple[str, str]:
-        connection = _resolve_connection(
+        connection = await self._trigger_connection(
             request.connection,
             connection_id=request.connection_id,
             provider_config_key=request.provider_config_key,
@@ -375,7 +375,7 @@ class PublicAPIService:
         return task.task_id, task.retry_key
 
     async def trigger_action(self, request: ActionTriggerRequest) -> tuple[str, str]:
-        connection = _resolve_connection(
+        connection = await self._trigger_connection(
             request.connection,
             connection_id=request.connection_id,
             provider_config_key=request.provider_config_key,
@@ -408,30 +408,44 @@ class PublicAPIService:
         )
         return task.task_id, task.retry_key
 
+    async def _trigger_connection(
+        self,
+        connection: TriggerConnectionInput | None,
+        *,
+        connection_id: str | None,
+        provider_config_key: str | None,
+        environment_id: int,
+    ) -> TriggerConnectionInput:
+        if connection is not None:
+            return connection
+        if not connection_id or not provider_config_key:
+            raise ApplicationError(
+                "missing_connection",
+                message=(
+                    'Trigger requests require "connection" or both '
+                    '"connectionId" and "providerConfigKey"'
+                ),
+                status_code=400,
+            )
 
-def _resolve_connection(
-    connection: TriggerConnectionInput | None,
-    *,
-    connection_id: str | None,
-    provider_config_key: str | None,
-    environment_id: int,
-) -> TriggerConnectionInput:
-    if connection is not None:
-        return connection
-    if not connection_id or not provider_config_key:
-        raise ApplicationError(
-            "missing_connection",
-            message=(
-                'Trigger requests require "connection" or both '
-                '"connectionId" and "providerConfigKey"'
-            ),
-            status_code=400,
+        resolved_connection = await self._lookup_connection(
+            environment_id=environment_id,
+            provider_config_key=provider_config_key,
+            connection_id=connection_id,
         )
-    return TriggerConnectionInput(
-        connectionId=connection_id,
-        providerConfigKey=provider_config_key,
-        environmentId=environment_id,
-    )
+        if resolved_connection is None:
+            raise ApplicationError(
+                "connection_not_found",
+                message=f'Connection "{connection_id}" was not found',
+                status_code=404,
+            )
+
+        return TriggerConnectionInput(
+            id=resolved_connection.id,
+            connectionId=resolved_connection.connection_id,
+            providerConfigKey=resolved_connection.provider_config_key,
+            environmentId=resolved_connection.environment_id,
+        )
 
 
 def _default_timeouts() -> dict[str, int]:

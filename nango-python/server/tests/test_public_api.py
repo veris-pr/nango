@@ -1211,8 +1211,12 @@ async def test_sync_and_action_triggers_create_orchestrator_tasks() -> None:
             "/sync/trigger",
             json={
                 "syncName": "issues",
-                "connectionId": "conn-1",
-                "providerConfigKey": "github-prod",
+                "connection": {
+                    "id": 1,
+                    "connectionId": "conn-1",
+                    "providerConfigKey": "github-prod",
+                    "environmentId": 1,
+                },
             },
         )
         action = await client.post(
@@ -1220,8 +1224,12 @@ async def test_sync_and_action_triggers_create_orchestrator_tasks() -> None:
             json={
                 "actionName": "createIssue",
                 "input": {"title": "Bug"},
-                "connectionId": "conn-1",
-                "providerConfigKey": "github-prod",
+                "connection": {
+                    "id": 1,
+                    "connectionId": "conn-1",
+                    "providerConfigKey": "github-prod",
+                    "environmentId": 1,
+                },
             },
         )
         dequeued = await client.post(
@@ -1237,6 +1245,170 @@ async def test_sync_and_action_triggers_create_orchestrator_tasks() -> None:
     assert {payload["type"] for payload in task_payloads} == {"sync", "action"}
     assert {payload["connection"]["provider_config_key"] for payload in task_payloads} == {
         "github-prod"
+    }
+
+
+async def test_triggers_use_db_backed_connection_identity_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return self._rows
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {
+                "environment_id": 1,
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-42",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": None,
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    orchestrator = OrchestratorService()
+    app = create_app(
+        Settings(service_name="test-core", database_url="postgres://test"),
+        orchestrator_service=orchestrator,
+    )
+
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        sync = await client.post(
+            "/sync/trigger",
+            json={
+                "syncName": "issues",
+                "connectionId": "conn-42",
+                "providerConfigKey": "github-prod",
+            },
+        )
+        action = await client.post(
+            "/action/trigger",
+            json={
+                "actionName": "createIssue",
+                "input": {"title": "Bug"},
+                "connectionId": "conn-42",
+                "providerConfigKey": "github-prod",
+            },
+        )
+        dequeued = await client.post(
+            "/orchestrator/v1/dequeue",
+            json={"groupKeyPattern": "*", "limit": 2, "longPolling": False},
+        )
+
+    assert sync.status_code == 200
+    assert action.status_code == 200
+    task_payloads = [task["payload"] for task in dequeued.json()]
+    assert {payload["connection"]["id"] for payload in task_payloads} == {42}
+    assert {payload["connection"]["connection_id"] for payload in task_payloads} == {"conn-42"}
+
+
+async def test_triggers_return_not_found_for_missing_db_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, _params: dict[str, object]) -> FakeResult:
+            return FakeResult()
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    app = create_app(Settings(service_name="test-core", database_url="postgres://test"))
+
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/sync/trigger",
+            json={
+                "syncName": "issues",
+                "connectionId": "missing",
+                "providerConfigKey": "github-prod",
+            },
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "connection_not_found",
+            "message": 'Connection "missing" was not found',
+        }
     }
 
 
