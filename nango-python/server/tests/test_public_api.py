@@ -6,6 +6,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from nango.api import PublicAPIService
+from nango.auth.models import (
+    AccountContext,
+    AccountSummary,
+    EnvironmentSummary,
+    SecretSummary,
+)
 from nango.domain.repositories import InMemoryIntegrationConfigRepository
 from nango.orchestrator import OrchestratorService
 from nango.server.app import create_app
@@ -147,6 +153,302 @@ async def test_integration_routes_use_db_backed_repository_when_configured(
             "updatedAt": "2025-01-02T03:04:05Z",
         }
     ]
+
+
+async def test_public_connection_route_uses_db_backed_repository_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return self._rows
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {"environment_id": 1, "provider_config_key": "github-prod"}:
+                return FakeResult(
+                    [
+                        {
+                            "id": 1,
+                            "environment_id": 1,
+                            "unique_key": "github-prod",
+                            "provider": "github",
+                            "oauth_client_id": "client-id",
+                            "oauth_scopes": None,
+                            "forward_webhooks": True,
+                            "missing_fields": [],
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {
+                "environment_id": 1,
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-1",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-1",
+                            "connection_config": {"base_url": "https://api.github.com"},
+                            "metadata": {"team": "platform"},
+                            "tags": {"region": "us"},
+                            "credentials": {
+                                "type": "OAUTH2",
+                                "access_token": "secret-access-token",
+                                "refresh_token": "secret-refresh-token",
+                            },
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": datetime(2025, 1, 3, 3, 4, 5, tzinfo=UTC),
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    class StubAuthService:
+        def __init__(self, context: AccountContext) -> None:
+            self._context = context
+
+        async def get_account_context_by_api_key(
+            self,
+            *,
+            secret_key: str | None = None,
+            internal_secret_key: str | None = None,
+        ) -> AccountContext | None:
+            return self._context if (secret_key or internal_secret_key) else None
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    auth_context = AccountContext(
+        account=AccountSummary(id=1, createdAt=now, updatedAt=now),
+        environment=EnvironmentSummary(
+            id=1,
+            name="dev",
+            accountId=1,
+            secretKey="secret",
+            isProduction=False,
+            createdAt=now,
+            updatedAt=now,
+        ),
+        secret=SecretSummary(
+            id=1,
+            environmentId=1,
+            displayName="Default",
+            secret="secret",
+            hashed="hashed",
+            isDefault=True,
+            createdAt=now,
+            updatedAt=now,
+        ),
+        authSource="api_secret",
+    )
+
+    app = create_app(Settings(service_name="test-core", database_url="postgres://test"))
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        app.state.auth_service = StubAuthService(auth_context)
+        fetched = await client.get(
+            "/connections/conn-1",
+            params={"provider_config_key": "github-prod"},
+            headers={"Authorization": "Bearer secret"},
+        )
+        deprecated = await client.get(
+            "/connection/conn-1",
+            params={"provider_config_key": "github-prod"},
+            headers={"Authorization": "Bearer secret"},
+        )
+
+    assert fetched.status_code == 200
+    assert fetched.json() == {
+        "id": 42,
+        "connection_id": "conn-1",
+        "provider_config_key": "github-prod",
+        "provider": "github",
+        "errors": [],
+        "tags": {"region": "us"},
+        "metadata": {"team": "platform"},
+        "connection_config": {"base_url": "https://api.github.com"},
+        "created_at": "2025-01-02T03:04:05Z",
+        "updated_at": "2025-01-04T03:04:05Z",
+        "last_fetched_at": "2025-01-03T03:04:05Z",
+        "credentials": {
+            "type": "OAUTH2",
+            "access_token": "secret-access-token",
+            "refresh_token": "secret-refresh-token",
+        },
+    }
+    assert deprecated.status_code == 200
+    assert deprecated.json() == fetched.json()
+
+
+async def test_public_connection_route_hides_credentials_for_non_privileged_customer_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {"environment_id": 1, "provider_config_key": "github-prod"}:
+                return FakeResult(
+                    [
+                        {
+                            "id": 1,
+                            "environment_id": 1,
+                            "unique_key": "github-prod",
+                            "provider": "github",
+                            "oauth_client_id": None,
+                            "oauth_scopes": None,
+                            "forward_webhooks": True,
+                            "missing_fields": [],
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {
+                "environment_id": 1,
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-1",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-1",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "credentials": {"access_token": "secret-access-token"},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    class StubAuthService:
+        def __init__(self, context: AccountContext) -> None:
+            self._context = context
+
+        async def get_account_context_by_api_key(
+            self,
+            *,
+            secret_key: str | None = None,
+            internal_secret_key: str | None = None,
+        ) -> AccountContext | None:
+            return self._context if (secret_key or internal_secret_key) else None
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    auth_context = AccountContext(
+        account=AccountSummary(id=1, createdAt=now, updatedAt=now),
+        environment=EnvironmentSummary(
+            id=1,
+            name="dev",
+            accountId=1,
+            secretKey="secret",
+            isProduction=False,
+            createdAt=now,
+            updatedAt=now,
+        ),
+        secret=SecretSummary(
+            id=1,
+            environmentId=1,
+            displayName="Default",
+            secret="secret",
+            hashed="hashed",
+            isDefault=True,
+            createdAt=now,
+            updatedAt=now,
+        ),
+        authSource="customer_key",
+        scopes=("environment:connections:read",),
+    )
+
+    app = create_app(Settings(service_name="test-core", database_url="postgres://test"))
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        app.state.auth_service = StubAuthService(auth_context)
+        fetched = await client.get(
+            "/connections/conn-1",
+            params={"provider_config_key": "github-prod"},
+            headers={"Authorization": "Bearer limited-secret"},
+        )
+
+    assert fetched.status_code == 200
+    assert fetched.json()["credentials"] == {}
 
 
 async def test_connect_session_create_and_get_token_shape() -> None:

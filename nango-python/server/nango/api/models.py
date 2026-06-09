@@ -30,6 +30,22 @@ class IntegrationResponse(ContractModel):
     data: IntegrationConfig
 
 
+class PublicConnectionFull(ContractModel):
+    id: int
+    connection_id: str
+    provider_config_key: str
+    provider: str
+    errors: list[dict[str, str]] = Field(default_factory=list)
+    end_user: dict[str, Any] | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, Any] | None = None
+    connection_config: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+    last_fetched_at: datetime | None = None
+    credentials: dict[str, Any] = Field(default_factory=dict)
+
+
 class ConnectSessionRecord(ContractModel):
     token: str
     expires_at: datetime = Field(alias="expiresAt")

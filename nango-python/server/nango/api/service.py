@@ -10,18 +10,25 @@ from nango.api.models import (
     ConnectSessionRecord,
     DeployValidationData,
     DeployValidationRequest,
+    PublicConnectionFull,
     SyncTriggerRequest,
     TriggerConnectionInput,
 )
+from nango.auth.models import AccountContext
 from nango.contracts.connect import (
     ConnectSessionCreateRequest,
     ConnectSessionCreateResponse,
     ConnectSessionToken,
 )
 from nango.domain.errors import integration_not_found
-from nango.domain.models import IntegrationConfig
-from nango.domain.postgres_repositories import PostgresIntegrationConfigRepository
+from nango.domain.models import Connection, IntegrationConfig
+from nango.domain.postgres_repositories import (
+    PostgresConnectionRepository,
+    PostgresIntegrationConfigRepository,
+)
 from nango.domain.repositories import (
+    ConnectionRepository,
+    InMemoryConnectionRepository,
     InMemoryIntegrationConfigRepository,
     IntegrationConfigRepository,
 )
@@ -35,6 +42,7 @@ CONNECT_SESSION_TOKEN_PREFIX = "nango_connect_session_"
 CONNECT_SESSION_TTL = timedelta(hours=1)
 
 IntegrationRepository = IntegrationConfigRepository | PostgresIntegrationConfigRepository
+ConnectionReadRepository = ConnectionRepository | PostgresConnectionRepository
 
 
 class InMemoryConnectSessionRepository:
@@ -74,6 +82,7 @@ class PublicAPIService:
         *,
         providers: ProviderCatalog | None = None,
         integrations: IntegrationRepository | None = None,
+        connections: ConnectionReadRepository | None = None,
         connect_sessions: InMemoryConnectSessionRepository | None = None,
         orchestrator: OrchestratorService | None = None,
     ) -> None:
@@ -81,10 +90,46 @@ class PublicAPIService:
         self.integrations: IntegrationRepository = (
             integrations or InMemoryIntegrationConfigRepository()
         )
+        self.connections: ConnectionReadRepository = connections or InMemoryConnectionRepository()
         self.connect_sessions = connect_sessions or InMemoryConnectSessionRepository()
         self.orchestrator = orchestrator or OrchestratorService()
         self.provider_resolver = ProviderResolver(providers)
         self.deploy_metadata = DeployMetadataService()
+
+    async def _lookup_integration(
+        self,
+        *,
+        provider_config_key: str,
+        environment_id: int,
+    ) -> IntegrationConfig | None:
+        if isinstance(self.integrations, PostgresIntegrationConfigRepository):
+            return await self.integrations.get_by_key(
+                environment_id=environment_id,
+                provider_config_key=provider_config_key,
+            )
+        return self.integrations.get_by_key(
+            environment_id=environment_id,
+            provider_config_key=provider_config_key,
+        )
+
+    async def _lookup_connection(
+        self,
+        *,
+        environment_id: int,
+        provider_config_key: str,
+        connection_id: str,
+    ) -> Connection | None:
+        if isinstance(self.connections, PostgresConnectionRepository):
+            return await self.connections.get_by_id(
+                environment_id=environment_id,
+                provider_config_key=provider_config_key,
+                connection_id=connection_id,
+            )
+        return self.connections.get_by_id(
+            environment_id=environment_id,
+            provider_config_key=provider_config_key,
+            connection_id=connection_id,
+        )
 
     def list_providers(self, *, language: str | None = None) -> list[dict[str, object]]:
         providers = (
@@ -111,19 +156,60 @@ class PublicAPIService:
         provider_config_key: str,
         environment_id: int = 1,
     ) -> IntegrationConfig:
-        if isinstance(self.integrations, PostgresIntegrationConfigRepository):
-            integration = await self.integrations.get_by_key(
-                environment_id=environment_id,
-                provider_config_key=provider_config_key,
-            )
-        else:
-            integration = self.integrations.get_by_key(
-                environment_id=environment_id,
-                provider_config_key=provider_config_key,
-            )
+        integration = await self._lookup_integration(
+            provider_config_key=provider_config_key,
+            environment_id=environment_id,
+        )
         if integration is None:
             raise integration_not_found(provider_config_key)
         return integration
+
+    async def get_public_connection(
+        self,
+        *,
+        connection_id: str,
+        provider_config_key: str,
+        auth: AccountContext,
+    ) -> PublicConnectionFull:
+        integration = await self._lookup_integration(
+            provider_config_key=provider_config_key,
+            environment_id=auth.environment.id,
+        )
+        if integration is None:
+            raise ApplicationError(
+                "unknown_provider_config",
+                message="Provider does not exist",
+                status_code=400,
+            )
+
+        connection = await self._lookup_connection(
+            environment_id=auth.environment.id,
+            provider_config_key=provider_config_key,
+            connection_id=connection_id,
+        )
+        if connection is None:
+            raise ApplicationError(
+                "connection_not_found",
+                message=f'Connection "{connection_id}" was not found',
+                status_code=404,
+            )
+
+        include_credentials = auth.auth_source != "customer_key" or (
+            "environment:connections:read_credentials" in auth.scopes
+        )
+        return PublicConnectionFull(
+            id=connection.id,
+            connection_id=connection.connection_id,
+            provider_config_key=connection.provider_config_key,
+            provider=integration.provider,
+            tags=connection.tags,
+            metadata=connection.metadata,
+            connection_config=connection.connection_config,
+            created_at=connection.created_at,
+            updated_at=connection.updated_at,
+            last_fetched_at=connection.last_fetched_at,
+            credentials=connection.credentials if include_credentials else {},
+        )
 
     def validate_deploy(self, request: DeployValidationRequest) -> DeployValidationData:
         yaml_text = request.yaml or request.nango_yaml

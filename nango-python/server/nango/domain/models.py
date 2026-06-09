@@ -53,6 +53,7 @@ class Connection(DomainModel):
     metadata: dict[str, Any] | None = None
     tags: dict[str, str] = Field(default_factory=dict)
     private_key_id: int | None = Field(default=None, alias="privateKeyId")
+    last_fetched_at: datetime | None = Field(default=None, alias="lastFetchedAt")
     created_at: datetime = Field(default_factory=utc_now, alias="createdAt")
     updated_at: datetime = Field(default_factory=utc_now, alias="updatedAt")
 

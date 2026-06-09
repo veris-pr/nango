@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+from typing import Annotated
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 
 from nango.api.models import (
     ActionTriggerRequest,
@@ -14,11 +15,14 @@ from nango.api.models import (
     IntegrationResponse,
     ProviderListResponse,
     ProviderResponse,
+    PublicConnectionFull,
     SyncTriggerRequest,
     TriggerTaskData,
     TriggerTaskResponse,
 )
 from nango.api.service import PublicAPIService
+from nango.auth.dependencies import api_auth
+from nango.auth.models import AccountContext
 from nango.contracts.connect import ConnectSessionCreateRequest, ConnectSessionCreateResponse
 from nango.utils.errors import ApplicationError
 
@@ -45,6 +49,28 @@ def create_public_api_router(service: PublicAPIService | None = None) -> APIRout
     @router.get("/integrations/{provider_config_key}", response_model=IntegrationResponse)
     async def get_integration(provider_config_key: str) -> IntegrationResponse:
         return IntegrationResponse(data=await api.get_integration(provider_config_key))
+
+    @router.get(
+        "/connection/{connection_id}",
+        response_model=PublicConnectionFull,
+        response_model_exclude_none=True,
+        deprecated=True,
+    )
+    @router.get(
+        "/connections/{connection_id}",
+        response_model=PublicConnectionFull,
+        response_model_exclude_none=True,
+    )
+    async def get_connection(
+        connection_id: str,
+        provider_config_key: Annotated[str, Query(min_length=1)],
+        auth: Annotated[AccountContext, Depends(api_auth)],
+    ) -> PublicConnectionFull:
+        return await api.get_public_connection(
+            connection_id=connection_id,
+            provider_config_key=provider_config_key,
+            auth=auth,
+        )
 
     @router.post("/connect/sessions", response_model=ConnectSessionCreateResponse)
     async def create_connect_session(
