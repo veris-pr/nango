@@ -56,6 +56,16 @@ class ConnectionRepository(Protocol):
         connection_id: str,
     ) -> Connection | None: ...
 
+    def list_for_environment(
+        self,
+        environment_id: int,
+        *,
+        connection_id: str | None = None,
+        provider_config_keys: tuple[str, ...] = (),
+        limit: int = 10_000,
+        page: int = 0,
+    ) -> tuple[Connection, ...]: ...
+
 
 class InMemoryIntegrationConfigRepository:
     def __init__(self) -> None:
@@ -187,3 +197,30 @@ class InMemoryConnectionRepository:
         connection_id: str,
     ) -> Connection | None:
         return self._connections_by_key.get((environment_id, provider_config_key, connection_id))
+
+    def list_for_environment(
+        self,
+        environment_id: int,
+        *,
+        connection_id: str | None = None,
+        provider_config_keys: tuple[str, ...] = (),
+        limit: int = 10_000,
+        page: int = 0,
+    ) -> tuple[Connection, ...]:
+        connections = [
+            connection
+            for (
+                connection_environment_id,
+                _,
+                stored_connection_id,
+            ), connection in self._connections_by_key.items()
+            if connection_environment_id == environment_id
+            and (connection_id is None or stored_connection_id == connection_id)
+            and (
+                not provider_config_keys
+                or connection.provider_config_key in provider_config_keys
+            )
+        ]
+        connections.sort(key=lambda connection: connection.created_at, reverse=True)
+        offset = page * limit
+        return tuple(connections[offset : offset + limit])

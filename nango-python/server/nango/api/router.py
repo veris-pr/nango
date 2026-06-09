@@ -16,6 +16,7 @@ from nango.api.models import (
     ProviderListResponse,
     ProviderResponse,
     PublicConnectionFull,
+    PublicConnectionListResponse,
     SyncTriggerRequest,
     TriggerTaskData,
     TriggerTaskResponse,
@@ -49,6 +50,34 @@ def create_public_api_router(service: PublicAPIService | None = None) -> APIRout
     @router.get("/integrations/{provider_config_key}", response_model=IntegrationResponse)
     async def get_integration(provider_config_key: str) -> IntegrationResponse:
         return IntegrationResponse(data=await api.get_integration(provider_config_key))
+
+    @router.get(
+        "/connection",
+        response_model=PublicConnectionListResponse,
+        response_model_exclude_none=True,
+        deprecated=True,
+    )
+    @router.get(
+        "/connections",
+        response_model=PublicConnectionListResponse,
+        response_model_exclude_none=True,
+    )
+    async def list_connections(
+        auth: Annotated[AccountContext, Depends(api_auth)],
+        connection_id: str | None = Query(default=None, alias="connectionId"),
+        integration_id: str | None = Query(default=None, alias="integrationId"),
+        limit: int = Query(default=10_000, ge=1, le=10_000),
+        page: int = Query(default=0, ge=0),
+    ) -> PublicConnectionListResponse:
+        return PublicConnectionListResponse(
+            connections=await api.list_public_connections(
+                auth=auth,
+                connection_id=connection_id,
+                integration_id=integration_id,
+                limit=limit,
+                page=page,
+            )
+        )
 
     @router.get(
         "/connection/{connection_id}",

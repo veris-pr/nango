@@ -10,6 +10,7 @@ from nango.api.models import (
     ConnectSessionRecord,
     DeployValidationData,
     DeployValidationRequest,
+    PublicConnection,
     PublicConnectionFull,
     SyncTriggerRequest,
     TriggerConnectionInput,
@@ -131,6 +132,47 @@ class PublicAPIService:
             connection_id=connection_id,
         )
 
+    async def _list_connections(
+        self,
+        *,
+        environment_id: int,
+        connection_id: str | None,
+        provider_config_keys: tuple[str, ...],
+        limit: int,
+        page: int,
+    ) -> tuple[Connection, ...]:
+        if isinstance(self.connections, PostgresConnectionRepository):
+            return await self.connections.list_for_environment(
+                environment_id,
+                connection_id=connection_id,
+                provider_config_keys=provider_config_keys,
+                limit=limit,
+                page=page,
+            )
+        return self.connections.list_for_environment(
+            environment_id,
+            connection_id=connection_id,
+            provider_config_keys=provider_config_keys,
+            limit=limit,
+            page=page,
+        )
+
+    async def _providers_by_connection_key(
+        self,
+        *,
+        environment_id: int,
+        provider_config_keys: tuple[str, ...],
+    ) -> dict[str, str]:
+        providers_by_key: dict[str, str] = {}
+        for provider_config_key in provider_config_keys:
+            integration = await self._lookup_integration(
+                provider_config_key=provider_config_key,
+                environment_id=environment_id,
+            )
+            if integration is not None:
+                providers_by_key[integration.provider_config_key] = integration.provider
+        return providers_by_key
+
     def list_providers(self, *, language: str | None = None) -> list[dict[str, object]]:
         providers = (
             self._providers
@@ -145,6 +187,47 @@ class PublicAPIService:
     def get_provider(self, provider_name: str) -> dict[str, object]:
         provider = self.provider_resolver.resolve(provider_name)
         return {"provider": provider_name, **provider}
+
+    async def list_public_connections(
+        self,
+        *,
+        auth: AccountContext,
+        connection_id: str | None = None,
+        integration_id: str | None = None,
+        limit: int = 10_000,
+        page: int = 0,
+    ) -> list[PublicConnection]:
+        provider_config_keys = (
+            tuple(part.strip() for part in integration_id.split(",") if part.strip())
+            if integration_id
+            else ()
+        )
+        connections = await self._list_connections(
+            environment_id=auth.environment.id,
+            connection_id=connection_id,
+            provider_config_keys=provider_config_keys,
+            limit=limit,
+            page=page,
+        )
+        providers_by_key = await self._providers_by_connection_key(
+            environment_id=auth.environment.id,
+            provider_config_keys=tuple(
+                sorted({connection.provider_config_key for connection in connections})
+            ),
+        )
+        return [
+            PublicConnection(
+                id=connection.id,
+                connection_id=connection.connection_id,
+                provider_config_key=connection.provider_config_key,
+                created=connection.created_at,
+                metadata=connection.metadata,
+                provider=providers_by_key[connection.provider_config_key],
+                tags=connection.tags,
+            )
+            for connection in connections
+            if connection.provider_config_key in providers_by_key
+        ]
 
     async def list_integrations(self, environment_id: int = 1) -> list[IntegrationConfig]:
         if isinstance(self.integrations, PostgresIntegrationConfigRepository):

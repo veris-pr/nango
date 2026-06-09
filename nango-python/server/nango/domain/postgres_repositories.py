@@ -110,6 +110,56 @@ class PostgresConnectionRepository:
             encryption_key=self._encryption_key,
         )
 
+    async def list_for_environment(
+        self,
+        environment_id: int,
+        *,
+        connection_id: str | None = None,
+        provider_config_keys: tuple[str, ...] = (),
+        limit: int = 10_000,
+        page: int = 0,
+    ) -> tuple[Connection, ...]:
+        where_provider_config_keys = ""
+        if provider_config_keys:
+            where_provider_config_keys = "AND provider_config_key = ANY(:provider_config_keys)"
+
+        where_connection_id = ""
+        if connection_id is not None:
+            where_connection_id = "AND connection_id = :connection_id"
+
+        async with self._session_factory() as session:
+            rows = (
+                await session.execute(
+                    text(
+                        f"""
+                        SELECT *
+                        FROM _nango_connections
+                        WHERE environment_id = :environment_id
+                          AND deleted = false
+                          {where_connection_id}
+                          {where_provider_config_keys}
+                        ORDER BY created_at DESC
+                        LIMIT :limit
+                        OFFSET :offset
+                        """
+                    ),
+                    {
+                        "environment_id": environment_id,
+                        "connection_id": connection_id,
+                        "provider_config_keys": list(provider_config_keys),
+                        "limit": limit,
+                        "offset": page * limit,
+                    },
+                )
+            ).mappings().all()
+        return tuple(
+            _connection_from_row(
+                cast(Mapping[str, object], row),
+                encryption_key=self._encryption_key,
+            )
+            for row in rows
+        )
+
 
 def _integration_from_row(row: Mapping[str, object]) -> IntegrationConfig:
     return IntegrationConfig(

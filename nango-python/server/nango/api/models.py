@@ -46,6 +46,22 @@ class PublicConnectionFull(ContractModel):
     credentials: dict[str, Any] = Field(default_factory=dict)
 
 
+class PublicConnection(ContractModel):
+    id: int
+    connection_id: str
+    provider_config_key: str
+    created: datetime
+    metadata: dict[str, Any] | None = None
+    provider: str
+    errors: list[dict[str, str]] = Field(default_factory=list)
+    end_user: dict[str, Any] | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class PublicConnectionListResponse(ContractModel):
+    connections: list[PublicConnection]
+
+
 class ConnectSessionRecord(ContractModel):
     token: str
     expires_at: datetime = Field(alias="expiresAt")
