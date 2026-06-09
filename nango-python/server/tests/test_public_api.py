@@ -1248,6 +1248,113 @@ async def test_sync_and_action_triggers_create_orchestrator_tasks() -> None:
     }
 
 
+async def test_action_trigger_accepts_ts_style_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {
+                "environment_id": 1,
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-1",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 1,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-1",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": None,
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    orchestrator = OrchestratorService()
+    app = create_app(
+        Settings(service_name="test-core", database_url="postgres://test"),
+        orchestrator_service=orchestrator,
+    )
+
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        action = await client.post(
+            "/action/trigger",
+            json={"action_name": "createIssue", "input": {"title": "Bug"}},
+            headers={
+                "provider-config-key": "github-prod",
+                "connection-id": "conn-1",
+                "x-async": "true",
+                "x-max-retries": "5",
+            },
+        )
+        dequeued = await client.post(
+            "/orchestrator/v1/dequeue",
+            json={"groupKeyPattern": "*", "limit": 1, "longPolling": False},
+        )
+
+    assert action.status_code == 200
+    assert action.json()["data"]["type"] == "action"
+    [task] = dequeued.json()
+    assert task["retryMax"] == 5
+    assert task["payload"] == {
+        "type": "action",
+        "actionName": "createIssue",
+        "activityLogId": task["payload"]["activityLogId"],
+        "input": {"title": "Bug"},
+        "async": True,
+        "connection": {
+            "id": 1,
+            "connection_id": "conn-1",
+            "provider_config_key": "github-prod",
+            "environment_id": 1,
+        },
+    }
+
+
 async def test_triggers_use_db_backed_connection_identity_when_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1303,6 +1410,24 @@ async def test_triggers_use_db_backed_connection_identity_when_configured(
                         }
                     ]
                 )
+            if params == {
+                "connection_id": 42,
+                "name": "issues",
+                "variant": "base",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": "sync-issues-base",
+                            "nango_connection_id": 42,
+                            "name": "issues",
+                            "variant": "base",
+                            "frequency": None,
+                            "last_sync_date": None,
+                            "sync_config_id": 7,
+                        }
+                    ]
+                )
             return FakeResult([])
 
     class FakeSessionFactory:
@@ -1352,6 +1477,404 @@ async def test_triggers_use_db_backed_connection_identity_when_configured(
     task_payloads = [task["payload"] for task in dequeued.json()]
     assert {payload["connection"]["id"] for payload in task_payloads} == {42}
     assert {payload["connection"]["connection_id"] for payload in task_payloads} == {"conn-42"}
+    assert {payload.get("syncId") for payload in task_payloads if payload["type"] == "sync"} == {
+        "sync-issues-base"
+    }
+
+
+async def test_sync_trigger_accepts_ts_style_single_sync_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {
+                "environment_id": 1,
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-42",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": None,
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {
+                "connection_id": 42,
+                "name": "issues",
+                "variant": "custom",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": "sync-issues-custom",
+                            "nango_connection_id": 42,
+                            "name": "issues",
+                            "variant": "custom",
+                            "frequency": None,
+                            "last_sync_date": None,
+                            "sync_config_id": 7,
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    orchestrator = OrchestratorService()
+    app = create_app(
+        Settings(service_name="test-core", database_url="postgres://test"),
+        orchestrator_service=orchestrator,
+    )
+
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/sync/trigger",
+            json={"syncs": ["issues::custom"]},
+            headers={
+                "provider-config-key": "github-prod",
+                "connection-id": "conn-42",
+            },
+        )
+        dequeued = await client.post(
+            "/orchestrator/v1/dequeue",
+            json={"groupKeyPattern": "*", "limit": 1, "longPolling": False},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["type"] == "sync"
+    [task] = dequeued.json()
+    assert task["payload"] == {
+        "type": "sync",
+        "syncId": "sync-issues-custom",
+        "syncName": "issues",
+        "syncVariant": "custom",
+        "debug": False,
+        "connection": {
+            "id": 42,
+            "connection_id": "conn-42",
+            "provider_config_key": "github-prod",
+            "environment_id": 1,
+        },
+    }
+
+
+async def test_sync_trigger_accepts_ts_style_multi_sync_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {
+                "environment_id": 1,
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-42",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": None,
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {
+                "connection_id": 42,
+                "name": "issues",
+                "variant": "base",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": "sync-issues-base",
+                            "nango_connection_id": 42,
+                            "name": "issues",
+                            "variant": "base",
+                            "frequency": None,
+                            "last_sync_date": None,
+                            "sync_config_id": 7,
+                        }
+                    ]
+                )
+            if params == {
+                "connection_id": 42,
+                "name": "pulls",
+                "variant": "custom",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": "sync-pulls-custom",
+                            "nango_connection_id": 42,
+                            "name": "pulls",
+                            "variant": "custom",
+                            "frequency": None,
+                            "last_sync_date": None,
+                            "sync_config_id": 8,
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    orchestrator = OrchestratorService()
+    app = create_app(
+        Settings(service_name="test-core", database_url="postgres://test"),
+        orchestrator_service=orchestrator,
+    )
+
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/sync/trigger",
+            json={
+                "syncs": ["issues", {"name": "pulls", "variant": "custom"}],
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+            },
+        )
+        dequeued = await client.post(
+            "/orchestrator/v1/dequeue",
+            json={"groupKeyPattern": "*", "limit": 2, "longPolling": False},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True}
+    payloads = [task["payload"] for task in dequeued.json()]
+    assert {payload["syncId"] for payload in payloads} == {
+        "sync-issues-base",
+        "sync-pulls-custom",
+    }
+    assert {(payload["syncName"], payload["syncVariant"]) for payload in payloads} == {
+        ("issues", "base"),
+        ("pulls", "custom"),
+    }
+    assert {payload["connection"]["connection_id"] for payload in payloads} == {"conn-42"}
+
+
+async def test_sync_trigger_returns_no_syncs_found_when_sync_row_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {
+                "environment_id": 1,
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-42",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": None,
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    app = create_app(Settings(service_name="test-core", database_url="postgres://test"))
+
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/sync/trigger",
+            json={
+                "syncs": ["issues"],
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "no_syncs_found",
+            "message": "No syncs found given the inputs.",
+        }
+    }
+
+
+async def test_sync_trigger_rejects_unsupported_full_refresh_modes() -> None:
+    app = create_app(Settings(service_name="test-core"))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/sync/trigger",
+            json={
+                "syncs": ["issues"],
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+                "sync_mode": "full_refresh",
+            },
+        )
+
+    assert response.status_code == 501
+    assert response.json() == {
+        "error": {
+            "code": "sync_trigger_not_implemented",
+            "message": "Python sync trigger does not yet support full refresh modes",
+        }
+    }
+
+
+async def test_sync_trigger_rejects_opts_with_legacy_sync_parameters() -> None:
+    app = create_app(Settings(service_name="test-core"))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/sync/trigger",
+            json={
+                "syncs": ["issues"],
+                "provider_config_key": "github-prod",
+                "connection_id": "conn-42",
+                "opts": {"reset": True},
+                "sync_mode": "incremental",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "invalid_body",
+            "message": "Cannot use opts with deprecated sync_mode/full_resync parameters",
+        }
+    }
 
 
 async def test_triggers_return_not_found_for_missing_db_connection(

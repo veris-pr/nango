@@ -72,6 +72,16 @@ class ConnectionUpsertResult(DomainModel):
     private_key: ConnectionPrivateKey | None = Field(default=None, alias="privateKey")
 
 
+class Sync(DomainModel):
+    id: str
+    nango_connection_id: int = Field(alias="nangoConnectionId")
+    name: str
+    variant: str
+    frequency: str | None = None
+    last_sync_date: datetime | None = Field(default=None, alias="lastSyncDate")
+    sync_config_id: int = Field(alias="syncConfigId")
+
+
 class SyncEndpoint(DomainModel):
     method: str
     path: str

@@ -8,7 +8,7 @@ from typing import cast
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from nango.domain.models import Connection, IntegrationConfig
+from nango.domain.models import Connection, IntegrationConfig, Sync
 from nango.utils.crypto import decrypt_aes_gcm_base64
 
 type ConnectionEndUserRow = dict[str, object]
@@ -230,6 +230,41 @@ class PostgresConnectionRepository:
         )
 
 
+class PostgresSyncRepository:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
+
+    async def get_by_name(
+        self,
+        *,
+        connection_id: int,
+        name: str,
+        variant: str,
+    ) -> Sync | None:
+        async with self._session_factory() as session:
+            row = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT *
+                        FROM _nango_syncs
+                        WHERE nango_connection_id = :connection_id
+                          AND name = :name
+                          AND variant = :variant
+                          AND deleted = false
+                        LIMIT 1
+                        """
+                    ),
+                    {
+                        "connection_id": connection_id,
+                        "name": name,
+                        "variant": variant,
+                    },
+                )
+            ).mappings().first()
+        return None if row is None else _sync_from_row(cast(Mapping[str, object], row))
+
+
 def _integration_from_row(row: Mapping[str, object]) -> IntegrationConfig:
     return IntegrationConfig(
         id=_required_int(row, "id"),
@@ -267,6 +302,18 @@ def _connection_from_row(
         updatedAt=_required_datetime(row, "updated_at"),
     )
     return connection
+
+
+def _sync_from_row(row: Mapping[str, object]) -> Sync:
+    return Sync(
+        id=_required_str(row, "id"),
+        nangoConnectionId=_required_int(row, "nango_connection_id"),
+        name=_required_str(row, "name"),
+        variant=_required_str(row, "variant"),
+        frequency=_optional_str(row, "frequency"),
+        lastSyncDate=_optional_datetime(row, "last_sync_date"),
+        syncConfigId=_required_int(row, "sync_config_id"),
+    )
 
 
 def _required_int(row: Mapping[str, object], key: str) -> int:

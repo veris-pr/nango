@@ -114,6 +114,16 @@ class TriggerConnectionInput(ContractModel):
     environment_id: int = Field(default=1, alias="environmentId")
 
 
+class SyncTriggerIdentifierInput(ContractModel):
+    name: str = Field(min_length=1)
+    variant: str = Field(default="base", min_length=1)
+
+
+class SyncTriggerOptionsInput(ContractModel):
+    reset: bool = False
+    empty_cache: bool = Field(default=False, alias="emptyCache")
+
+
 class SyncTriggerRequest(ContractModel):
     sync_id: str | None = Field(default=None, alias="syncId")
     sync_name: str = Field(alias="syncName", min_length=1)
@@ -125,11 +135,31 @@ class SyncTriggerRequest(ContractModel):
     environment_id: int = Field(default=1, alias="environmentId")
 
 
+class PublicSyncTriggerRequest(ContractModel):
+    sync_id: str | None = Field(default=None, alias="syncId")
+    sync_name: str | None = Field(default=None, alias="syncName")
+    sync_variant: str = Field(default="base", alias="syncVariant", min_length=1)
+    debug: bool = False
+    connection: TriggerConnectionInput | None = None
+    connection_id: str | None = Field(default=None, alias="connectionId")
+    provider_config_key: str | None = Field(default=None, alias="providerConfigKey")
+    environment_id: int = Field(default=1, alias="environmentId")
+    syncs: list[str | SyncTriggerIdentifierInput] | None = None
+    opts: SyncTriggerOptionsInput | None = None
+    full_resync: bool | None = None
+    sync_mode: Literal[
+        "incremental",
+        "full_refresh",
+        "full_refresh_and_clear_cache",
+    ] | None = None
+
+
 class ActionTriggerRequest(ContractModel):
     action_name: str = Field(alias="actionName", min_length=1)
     activity_log_id: str | None = Field(default=None, alias="activityLogId")
     input: Any = None
     async_: bool = Field(default=False, alias="async")
+    retry_max: int = Field(default=0, alias="retryMax", ge=0, le=5)
     connection: TriggerConnectionInput | None = None
     connection_id: str | None = Field(default=None, alias="connectionId")
     provider_config_key: str | None = Field(default=None, alias="providerConfigKey")
@@ -144,3 +174,7 @@ class TriggerTaskData(ContractModel):
 
 class TriggerTaskResponse(ContractModel):
     data: TriggerTaskData
+
+
+class SuccessResponse(ContractModel):
+    success: bool

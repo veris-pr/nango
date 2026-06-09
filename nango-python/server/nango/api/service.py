@@ -29,6 +29,7 @@ from nango.domain.models import Connection, IntegrationConfig
 from nango.domain.postgres_repositories import (
     PostgresConnectionRepository,
     PostgresIntegrationConfigRepository,
+    PostgresSyncRepository,
 )
 from nango.domain.repositories import (
     ConnectionRepository,
@@ -47,6 +48,7 @@ CONNECT_SESSION_TTL = timedelta(hours=1)
 
 IntegrationRepository = IntegrationConfigRepository | PostgresIntegrationConfigRepository
 ConnectionReadRepository = ConnectionRepository | PostgresConnectionRepository
+SyncReadRepository = PostgresSyncRepository | None
 
 
 class InMemoryConnectSessionRepository:
@@ -87,6 +89,7 @@ class PublicAPIService:
         providers: ProviderCatalog | None = None,
         integrations: IntegrationRepository | None = None,
         connections: ConnectionReadRepository | None = None,
+        syncs: SyncReadRepository = None,
         connect_sessions: InMemoryConnectSessionRepository | None = None,
         orchestrator: OrchestratorService | None = None,
     ) -> None:
@@ -95,6 +98,7 @@ class PublicAPIService:
             integrations or InMemoryIntegrationConfigRepository()
         )
         self.connections: ConnectionReadRepository = connections or InMemoryConnectionRepository()
+        self.syncs = syncs
         self.connect_sessions = connect_sessions or InMemoryConnectSessionRepository()
         self.orchestrator = orchestrator or OrchestratorService()
         self.provider_resolver = ProviderResolver(providers)
@@ -350,6 +354,20 @@ class PublicAPIService:
             provider_config_key=request.provider_config_key,
             environment_id=request.environment_id,
         )
+        sync_id = request.sync_id or request.sync_name
+        if self.syncs is not None:
+            resolved_sync = await self.syncs.get_by_name(
+                connection_id=connection.id,
+                name=request.sync_name,
+                variant=request.sync_variant,
+            )
+            if resolved_sync is None:
+                raise ApplicationError(
+                    "no_syncs_found",
+                    message="No syncs found given the inputs.",
+                    status_code=400,
+                )
+            sync_id = resolved_sync.id
         task = await self.orchestrator.create_immediate(
             ImmediateTaskCreateRequest.model_validate(
                 {
@@ -363,7 +381,7 @@ class PublicAPIService:
                     "timeoutSettingsInSecs": _default_timeouts(),
                     "args": {
                         "type": "sync",
-                        "syncId": request.sync_id or request.sync_name,
+                        "syncId": sync_id,
                         "syncName": request.sync_name,
                         "syncVariant": request.sync_variant,
                         "debug": request.debug,
@@ -373,6 +391,10 @@ class PublicAPIService:
             )
         )
         return task.task_id, task.retry_key
+
+    async def trigger_syncs(self, requests: list[SyncTriggerRequest]) -> None:
+        for request in requests:
+            await self.trigger_sync(request)
 
     async def trigger_action(self, request: ActionTriggerRequest) -> tuple[str, str]:
         connection = await self._trigger_connection(
@@ -393,7 +415,7 @@ class PublicAPIService:
                         "key": f"action:{connection.provider_config_key}:{request.action_name}",
                         "maxConcurrency": 1,
                     },
-                    "retry": {"count": 0, "max": 0},
+                    "retry": {"count": 0, "max": request.retry_max},
                     "timeoutSettingsInSecs": _default_timeouts(),
                     "args": {
                         "type": "action",

@@ -21,6 +21,7 @@ from nango.auth.service import AuthService
 from nango.domain.postgres_repositories import (
     PostgresConnectionRepository,
     PostgresIntegrationConfigRepository,
+    PostgresSyncRepository,
 )
 from nango.domain.repositories import InMemoryIntegrationConfigRepository
 from nango.orchestrator import OrchestratorService, create_orchestrator_router
@@ -49,6 +50,7 @@ def create_app(
         app.state.auth_service = AuthService(settings=app_settings)
         app.state.integration_repository = InMemoryIntegrationConfigRepository()
         app.state.connection_repository = None
+        app.state.sync_repository = None
         if database_settings is None:
             yield
             return
@@ -68,10 +70,13 @@ def create_app(
                 app.state.db_session_factory,
                 encryption_key=app_settings.encryption_key,
             )
+            sync_repository = PostgresSyncRepository(app.state.db_session_factory)
             app.state.integration_repository = integration_repository
             app.state.connection_repository = connection_repository
+            app.state.sync_repository = sync_repository
             public_api.integrations = integration_repository
             public_api.connections = connection_repository
+            public_api.syncs = sync_repository
         if persist_service is None:
             persist.records_repository = PostgresRecordsRepository(app.state.db_session_factory)
         try:
