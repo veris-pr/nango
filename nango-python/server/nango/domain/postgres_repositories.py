@@ -134,6 +134,10 @@ class PostgresConnectionRepository:
         *,
         connection_id: str | None = None,
         provider_config_keys: tuple[str, ...] = (),
+        search: str | None = None,
+        end_user_id: str | None = None,
+        end_user_organization_id: str | None = None,
+        tags: dict[str, str] | None = None,
         limit: int = 10_000,
         page: int = 0,
     ) -> tuple[Connection, ...]:
@@ -144,6 +148,30 @@ class PostgresConnectionRepository:
         where_connection_id = ""
         if connection_id is not None:
             where_connection_id = "AND connection_id = :connection_id"
+
+        where_end_user_id = ""
+        if end_user_id is not None:
+            where_end_user_id = "AND end_users.end_user_id = :end_user_id"
+
+        where_end_user_organization_id = ""
+        if end_user_organization_id is not None:
+            where_end_user_organization_id = (
+                "AND end_users.organization_id = :end_user_organization_id"
+            )
+
+        where_search = ""
+        if search is not None:
+            where_search = """
+            AND (
+                _nango_connections.connection_id ILIKE :search_pattern
+                OR end_users.display_name ILIKE :search_pattern
+                OR end_users.email ILIKE :search_pattern
+            )
+            """
+
+        where_tags = ""
+        if tags:
+            where_tags = "AND _nango_connections.tags @> :tags::jsonb"
 
         async with self._session_factory() as session:
             rows = (
@@ -171,6 +199,10 @@ class PostgresConnectionRepository:
                           AND deleted = false
                           {where_connection_id}
                           {where_provider_config_keys}
+                          {where_end_user_id}
+                          {where_end_user_organization_id}
+                          {where_search}
+                          {where_tags}
                         ORDER BY created_at DESC
                         LIMIT :limit
                         OFFSET :offset
@@ -180,6 +212,10 @@ class PostgresConnectionRepository:
                         "environment_id": environment_id,
                         "connection_id": connection_id,
                         "provider_config_keys": list(provider_config_keys),
+                        "end_user_id": end_user_id,
+                        "end_user_organization_id": end_user_organization_id,
+                        "search_pattern": None if search is None else f"%{search}%",
+                        "tags": None if not tags else json.dumps(tags),
                         "limit": limit,
                         "offset": page * limit,
                     },

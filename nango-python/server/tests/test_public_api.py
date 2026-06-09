@@ -510,6 +510,10 @@ async def test_public_connections_route_lists_db_backed_connections(
                 "environment_id": 1,
                 "connection_id": None,
                 "provider_config_keys": [],
+                "end_user_id": None,
+                "end_user_organization_id": None,
+                "search_pattern": None,
+                "tags": None,
                 "limit": 10000,
                 "offset": 0,
             }:
@@ -729,6 +733,10 @@ async def test_public_connections_route_filters_by_integration_id(
                 "environment_id": 1,
                 "connection_id": None,
                 "provider_config_keys": ["github-prod"],
+                "end_user_id": None,
+                "end_user_organization_id": None,
+                "search_pattern": None,
+                "tags": None,
                 "limit": 10000,
                 "offset": 0,
             }:
@@ -846,6 +854,304 @@ async def test_public_connections_route_filters_by_integration_id(
             }
         ]
     }
+
+
+async def test_public_connections_route_filters_by_search_end_user_and_tags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return self._rows
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {
+                "environment_id": 1,
+                "connection_id": None,
+                "provider_config_keys": [],
+                "end_user_id": None,
+                "end_user_organization_id": None,
+                "search_pattern": "%Ada%",
+                "tags": None,
+                "limit": 10000,
+                "offset": 0,
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-ada",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": {
+                                "id": 7,
+                                "end_user_id": "user-ada",
+                                "account_id": 1,
+                                "environment_id": 1,
+                                "email": "ada@example.com",
+                                "display_name": "Ada Lovelace",
+                                "organization_id": "org-1",
+                                "organization_display_name": "Platform",
+                                "tags": None,
+                                "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                                "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            },
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {
+                "environment_id": 1,
+                "connection_id": None,
+                "provider_config_keys": [],
+                "end_user_id": "user-ada",
+                "end_user_organization_id": None,
+                "search_pattern": None,
+                "tags": None,
+                "limit": 10000,
+                "offset": 0,
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-ada",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": {
+                                "id": 7,
+                                "end_user_id": "user-ada",
+                                "account_id": 1,
+                                "environment_id": 1,
+                                "email": "ada@example.com",
+                                "display_name": "Ada Lovelace",
+                                "organization_id": "org-1",
+                                "organization_display_name": "Platform",
+                                "tags": None,
+                                "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                                "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            },
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {
+                "environment_id": 1,
+                "connection_id": None,
+                "provider_config_keys": [],
+                "end_user_id": None,
+                "end_user_organization_id": "org-1",
+                "search_pattern": None,
+                "tags": None,
+                "limit": 10000,
+                "offset": 0,
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 42,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-ada",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {},
+                            "end_user": {
+                                "id": 7,
+                                "end_user_id": "user-ada",
+                                "account_id": 1,
+                                "environment_id": 1,
+                                "email": "ada@example.com",
+                                "display_name": "Ada Lovelace",
+                                "organization_id": "org-1",
+                                "organization_display_name": "Platform",
+                                "tags": None,
+                                "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                                "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            },
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 4, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {
+                "environment_id": 1,
+                "connection_id": None,
+                "provider_config_keys": [],
+                "end_user_id": None,
+                "end_user_organization_id": None,
+                "search_pattern": None,
+                "tags": '{"department": "engineering", "env": "prod"}',
+                "limit": 10000,
+                "offset": 0,
+            }:
+                return FakeResult(
+                    [
+                        {
+                            "id": 43,
+                            "config_id": 1,
+                            "environment_id": 1,
+                            "provider_config_key": "github-prod",
+                            "connection_id": "conn-tags",
+                            "connection_config": {},
+                            "metadata": None,
+                            "tags": {"department": "engineering", "env": "prod"},
+                            "end_user": None,
+                            "active_logs": [],
+                            "credentials": {},
+                            "credentials_iv": None,
+                            "credentials_tag": None,
+                            "last_fetched_at": None,
+                            "created_at": datetime(2025, 1, 5, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 5, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            if params == {"environment_id": 1, "provider_config_key": "github-prod"}:
+                return FakeResult(
+                    [
+                        {
+                            "id": 1,
+                            "environment_id": 1,
+                            "unique_key": "github-prod",
+                            "provider": "github",
+                            "oauth_client_id": None,
+                            "oauth_scopes": None,
+                            "forward_webhooks": True,
+                            "missing_fields": [],
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    class StubAuthService:
+        def __init__(self, context: AccountContext) -> None:
+            self._context = context
+
+        async def get_account_context_by_api_key(
+            self,
+            *,
+            secret_key: str | None = None,
+            internal_secret_key: str | None = None,
+        ) -> AccountContext | None:
+            return self._context if (secret_key or internal_secret_key) else None
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    auth_context = AccountContext(
+        account=AccountSummary(id=1, createdAt=now, updatedAt=now),
+        environment=EnvironmentSummary(
+            id=1,
+            name="dev",
+            accountId=1,
+            secretKey="secret",
+            isProduction=False,
+            createdAt=now,
+            updatedAt=now,
+        ),
+        secret=SecretSummary(
+            id=1,
+            environmentId=1,
+            displayName="Default",
+            secret="secret",
+            hashed="hashed",
+            isDefault=True,
+            createdAt=now,
+            updatedAt=now,
+        ),
+        authSource="api_secret",
+    )
+
+    app = create_app(Settings(service_name="test-core", database_url="postgres://test"))
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        app.state.auth_service = StubAuthService(auth_context)
+        by_search = await client.get(
+            "/connections",
+            params={"search": "Ada"},
+            headers={"Authorization": "Bearer secret"},
+        )
+        by_user = await client.get(
+            "/connections",
+            params={"endUserId": "user-ada"},
+            headers={"Authorization": "Bearer secret"},
+        )
+        by_org = await client.get(
+            "/connections",
+            params={"endUserOrganizationId": "org-1"},
+            headers={"Authorization": "Bearer secret"},
+        )
+        by_tags = await client.get(
+            "/connections?tags[department]=engineering&tags[env]=prod",
+            headers={"Authorization": "Bearer secret"},
+        )
+
+    assert by_search.status_code == 200
+    assert by_search.json()["connections"][0]["connection_id"] == "conn-ada"
+    assert by_user.status_code == 200
+    assert by_user.json()["connections"][0]["end_user"]["id"] == "user-ada"
+    assert by_org.status_code == 200
+    assert by_org.json()["connections"][0]["end_user"]["id"] == "user-ada"
+    assert by_tags.status_code == 200
+    assert by_tags.json()["connections"][0]["connection_id"] == "conn-tags"
 
 
 async def test_connect_session_create_and_get_token_shape() -> None:

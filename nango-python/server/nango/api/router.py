@@ -63,9 +63,16 @@ def create_public_api_router(service: PublicAPIService | None = None) -> APIRout
         response_model_exclude_none=True,
     )
     async def list_connections(
+        request: Request,
         auth: Annotated[AccountContext, Depends(api_auth)],
         connection_id: str | None = Query(default=None, alias="connectionId"),
         integration_id: str | None = Query(default=None, alias="integrationId"),
+        search: str | None = Query(default=None, min_length=1, max_length=255),
+        end_user_id: str | None = Query(default=None, alias="endUserId"),
+        end_user_organization_id: str | None = Query(
+            default=None,
+            alias="endUserOrganizationId",
+        ),
         limit: int = Query(default=10_000, ge=1, le=10_000),
         page: int = Query(default=0, ge=0),
     ) -> PublicConnectionListResponse:
@@ -74,6 +81,10 @@ def create_public_api_router(service: PublicAPIService | None = None) -> APIRout
                 auth=auth,
                 connection_id=connection_id,
                 integration_id=integration_id,
+                search=search,
+                end_user_id=end_user_id,
+                end_user_organization_id=end_user_organization_id,
+                tags=_query_tags(request),
                 limit=limit,
                 page=page,
             )
@@ -186,3 +197,12 @@ def _not_implemented(code: str) -> ApplicationError:
         message="This TypeScript route group has not been ported to Python yet",
         status_code=HTTPStatus.NOT_IMPLEMENTED,
     )
+
+
+def _query_tags(request: Request) -> dict[str, str] | None:
+    tags = {
+        key.removeprefix("tags[").removesuffix("]"): value
+        for key, value in request.query_params.multi_items()
+        if key.startswith("tags[") and key.endswith("]") and value
+    }
+    return tags or None

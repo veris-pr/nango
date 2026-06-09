@@ -62,6 +62,10 @@ class ConnectionRepository(Protocol):
         *,
         connection_id: str | None = None,
         provider_config_keys: tuple[str, ...] = (),
+        search: str | None = None,
+        end_user_id: str | None = None,
+        end_user_organization_id: str | None = None,
+        tags: dict[str, str] | None = None,
         limit: int = 10_000,
         page: int = 0,
     ) -> tuple[Connection, ...]: ...
@@ -204,6 +208,10 @@ class InMemoryConnectionRepository:
         *,
         connection_id: str | None = None,
         provider_config_keys: tuple[str, ...] = (),
+        search: str | None = None,
+        end_user_id: str | None = None,
+        end_user_organization_id: str | None = None,
+        tags: dict[str, str] | None = None,
         limit: int = 10_000,
         page: int = 0,
     ) -> tuple[Connection, ...]:
@@ -220,7 +228,53 @@ class InMemoryConnectionRepository:
                 not provider_config_keys
                 or connection.provider_config_key in provider_config_keys
             )
+            and _matches_search(connection, search)
+            and _matches_end_user_id(connection, end_user_id)
+            and _matches_end_user_organization_id(connection, end_user_organization_id)
+            and _matches_tags(connection, tags)
         ]
         connections.sort(key=lambda connection: connection.created_at, reverse=True)
         offset = page * limit
         return tuple(connections[offset : offset + limit])
+
+
+def _matches_search(connection: Connection, search: str | None) -> bool:
+    if not search:
+        return True
+    search_lower = search.lower()
+    if search_lower in connection.connection_id.lower():
+        return True
+    end_user = connection.end_user or {}
+    display_name = end_user.get("display_name")
+    email = end_user.get("email")
+    return (
+        isinstance(display_name, str)
+        and search_lower in display_name.lower()
+    ) or (
+        isinstance(email, str)
+        and search_lower in email.lower()
+    )
+
+
+def _matches_end_user_id(connection: Connection, end_user_id: str | None) -> bool:
+    if end_user_id is None:
+        return True
+    return connection.end_user is not None and connection.end_user.get("end_user_id") == end_user_id
+
+
+def _matches_end_user_organization_id(
+    connection: Connection,
+    end_user_organization_id: str | None,
+) -> bool:
+    if end_user_organization_id is None:
+        return True
+    return (
+        connection.end_user is not None
+        and connection.end_user.get("organization_id") == end_user_organization_id
+    )
+
+
+def _matches_tags(connection: Connection, tags: dict[str, str] | None) -> bool:
+    if not tags:
+        return True
+    return all(connection.tags.get(key) == value for key, value in tags.items())
