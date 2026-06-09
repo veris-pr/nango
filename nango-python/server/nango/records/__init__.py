@@ -13,11 +13,13 @@ from nango.records.models import (
     RecordInput,
     RecordMetadata,
 )
+from nango.records.postgres_repository import PostgresRecordsRepository
 from nango.records.repository import InMemoryRecordsRepository
 
 __all__ = [
     "InMemoryRecordsRepository",
     "ListRecordsResult",
+    "PostgresRecordsRepository",
     "Record",
     "RecordCheckpoint",
     "RecordCount",

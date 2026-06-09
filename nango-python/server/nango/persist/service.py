@@ -18,21 +18,26 @@ from nango.persist.models import (
 from nango.records import (
     InMemoryRecordsRepository,
     ListRecordsResult,
+    PostgresRecordsRepository,
     RecordCheckpoint,
     RecordInput,
 )
+
+RecordsRepository = InMemoryRecordsRepository | PostgresRecordsRepository
 
 
 class PersistService:
     def __init__(
         self,
-        records_repository: InMemoryRecordsRepository | None = None,
+        records_repository: RecordsRepository | None = None,
         logs_repository: InMemoryLogsRepository | None = None,
     ) -> None:
-        self._records = records_repository or InMemoryRecordsRepository()
+        self.records_repository: RecordsRepository = (
+            records_repository or InMemoryRecordsRepository()
+        )
         self._logs = logs_repository or InMemoryLogsRepository()
 
-    def persist_records(
+    async def persist_records(
         self,
         *,
         connection_id: int,
@@ -54,20 +59,37 @@ class PersistService:
             )
             for record in request.records
         ]
-        if mode == "update":
-            persisted = self._records.update_records(records)
-        else:
-            persisted = self._records.upsert_records(records)
 
-        self._write_activity_log(
-            activity_log_id=request.activity_log_id,
-            auth=auth,
-            message=f"Persisted {len(persisted)} {request.model} record(s)",
-            meta={"model": request.model, "mode": mode},
-        )
+        if isinstance(self.records_repository, PostgresRecordsRepository):
+            if mode == "update":
+                persisted = await self.records_repository.update_records(
+                    environment_id=auth.environment_id,
+                    records=records,
+                )
+            else:
+                persisted = await self.records_repository.upsert_records(
+                    environment_id=auth.environment_id,
+                    records=records,
+                )
+        elif mode == "update":
+            persisted = self.records_repository.update_records(records)
+        else:
+            persisted = self.records_repository.upsert_records(records)
+
+        if request.activity_log_id:
+            await self.write_log(
+                request=PersistLogRequest(
+                    activityLogId=request.activity_log_id,
+                    message=f"Persisted {len(persisted)} {request.model} record(s)",
+                    level="info",
+                    createdAt=datetime.now(UTC),
+                    meta={"model": request.model, "mode": mode},
+                ),
+                auth=auth,
+            )
         return PersistRecordsResponse(records=len(persisted), nextMerging=request.merging)
 
-    def list_records(
+    async def list_records(
         self,
         *,
         connection_id: int,
@@ -76,7 +98,15 @@ class PersistService:
         cursor: str | None,
         include_deleted: bool,
     ) -> ListRecordsResult:
-        return self._records.list_records(
+        if isinstance(self.records_repository, PostgresRecordsRepository):
+            return await self.records_repository.list_records(
+                connection_id=connection_id,
+                model=model,
+                limit=limit,
+                cursor=cursor,
+                include_deleted=include_deleted,
+            )
+        return self.records_repository.list_records(
             connection_id=connection_id,
             model=model,
             limit=limit,
@@ -84,7 +114,7 @@ class PersistService:
             include_deleted=include_deleted,
         )
 
-    def delete_records(
+    async def delete_records(
         self,
         *,
         connection_id: int,
@@ -95,42 +125,76 @@ class PersistService:
         if external_ids is None and request.records:
             external_ids = [record.id for record in request.records]
 
-        deleted = self._records.delete_records(
-            connection_id=connection_id,
-            model=request.model,
-            external_ids=external_ids,
-        )
-        self._write_activity_log(
-            activity_log_id=request.activity_log_id,
-            auth=auth,
-            message=f"Deleted {deleted} {request.model} record(s)",
-            meta={"model": request.model},
-        )
+        if isinstance(self.records_repository, PostgresRecordsRepository):
+            deleted = await self.records_repository.delete_records(
+                environment_id=auth.environment_id,
+                connection_id=connection_id,
+                model=request.model,
+                external_ids=external_ids,
+            )
+        else:
+            deleted = self.records_repository.delete_records(
+                connection_id=connection_id,
+                model=request.model,
+                external_ids=external_ids,
+            )
+        if request.activity_log_id:
+            await self.write_log(
+                request=PersistLogRequest(
+                    activityLogId=request.activity_log_id,
+                    message=f"Deleted {deleted} {request.model} record(s)",
+                    level="info",
+                    createdAt=datetime.now(UTC),
+                    meta={"model": request.model},
+                ),
+                auth=auth,
+            )
         return DeleteRecordsResponse(deleted=deleted)
 
-    def save_checkpoint(
+    async def save_checkpoint(
         self,
         *,
         connection_id: int,
         request: CheckpointRequest,
+        auth: PersistAuthContext,
     ) -> RecordCheckpoint:
-        return self._records.save_checkpoint(
+        if isinstance(self.records_repository, PostgresRecordsRepository):
+            return await self.records_repository.save_checkpoint(
+                environment_id=auth.environment_id,
+                connection_id=connection_id,
+                model=request.model,
+                name=request.key,
+                cursor=request.cursor,
+            )
+        return self.records_repository.save_checkpoint(
             connection_id=connection_id,
             model=request.model,
             name=request.key,
             cursor=request.cursor,
         )
 
-    def get_checkpoint(
+    async def get_checkpoint(
         self,
         *,
         connection_id: int,
         model: str,
         key: str,
+        auth: PersistAuthContext,
     ) -> RecordCheckpoint | None:
-        return self._records.get_checkpoint(connection_id=connection_id, model=model, name=key)
+        if isinstance(self.records_repository, PostgresRecordsRepository):
+            return await self.records_repository.get_checkpoint(
+                environment_id=auth.environment_id,
+                connection_id=connection_id,
+                model=model,
+                name=key,
+            )
+        return self.records_repository.get_checkpoint(
+            connection_id=connection_id,
+            model=model,
+            name=key,
+        )
 
-    def write_log(self, *, request: PersistLogRequest, auth: PersistAuthContext) -> None:
+    async def write_log(self, *, request: PersistLogRequest, auth: PersistAuthContext) -> None:
         self._write_activity_log(
             activity_log_id=request.activity_log_id,
             auth=auth,

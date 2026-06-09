@@ -38,7 +38,7 @@ def create_persist_router(service: PersistService | None = None) -> APIRouter:
         request: PersistRecordsRequest,
         auth: Annotated[PersistAuthContext, Depends(persist_auth)],
     ) -> PersistRecordsResponse:
-        return persist.persist_records(
+        return await persist.persist_records(
             connection_id=connection_id,
             sync_id=sync_id,
             sync_job_id=sync_job_id,
@@ -58,7 +58,7 @@ def create_persist_router(service: PersistService | None = None) -> APIRouter:
         request: PersistRecordsRequest,
         auth: Annotated[PersistAuthContext, Depends(persist_auth)],
     ) -> PersistRecordsResponse:
-        return persist.persist_records(
+        return await persist.persist_records(
             connection_id=connection_id,
             sync_id=sync_id,
             sync_job_id=sync_job_id,
@@ -76,7 +76,7 @@ def create_persist_router(service: PersistService | None = None) -> APIRouter:
         request: DeleteRecordsRequest,
         auth: Annotated[PersistAuthContext, Depends(persist_auth)],
     ) -> DeleteRecordsResponse:
-        return persist.delete_records(connection_id=connection_id, request=request, auth=auth)
+        return await persist.delete_records(connection_id=connection_id, request=request, auth=auth)
 
     @router.get(
         "/environment/{environment_id}/connection/{connection_id}/records",
@@ -90,8 +90,7 @@ def create_persist_router(service: PersistService | None = None) -> APIRouter:
         cursor: str | None = None,
         include_deleted: bool = Query(default=True, alias="includeDeleted"),
     ) -> ListPersistRecordsResponse:
-        del auth
-        result = persist.list_records(
+        result = await persist.list_records(
             connection_id=connection_id,
             model=model,
             limit=limit,
@@ -109,9 +108,12 @@ def create_persist_router(service: PersistService | None = None) -> APIRouter:
         request: CheckpointRequest,
         auth: Annotated[PersistAuthContext, Depends(persist_auth)],
     ) -> CheckpointResponse:
-        del auth
         return CheckpointResponse(
-            checkpoint=persist.save_checkpoint(connection_id=connection_id, request=request)
+            checkpoint=await persist.save_checkpoint(
+                connection_id=connection_id,
+                request=request,
+                auth=auth,
+            )
         )
 
     @router.get(
@@ -124,8 +126,12 @@ def create_persist_router(service: PersistService | None = None) -> APIRouter:
         model: str,
         key: str,
     ) -> CheckpointResponse | JSONResponse:
-        del auth
-        checkpoint = persist.get_checkpoint(connection_id=connection_id, model=model, key=key)
+        checkpoint = await persist.get_checkpoint(
+            connection_id=connection_id,
+            model=model,
+            key=key,
+            auth=auth,
+        )
         if checkpoint is None:
             return _api_error("checkpoint_not_found", "Checkpoint not found", status_code=404)
         return CheckpointResponse(checkpoint=checkpoint)
@@ -135,7 +141,7 @@ def create_persist_router(service: PersistService | None = None) -> APIRouter:
         request: PersistLogRequest,
         auth: Annotated[PersistAuthContext, Depends(persist_auth)],
     ) -> Response:
-        persist.write_log(request=request, auth=auth)
+        await persist.write_log(request=request, auth=auth)
         return Response(status_code=204)
 
     @router.post("/daemon/prune", response_model=PersistNoopResponse)

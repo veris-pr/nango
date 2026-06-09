@@ -22,6 +22,7 @@ from nango.domain.postgres_repositories import PostgresIntegrationConfigReposito
 from nango.domain.repositories import InMemoryIntegrationConfigRepository
 from nango.orchestrator import OrchestratorService, create_orchestrator_router
 from nango.persist import PersistService, create_persist_router
+from nango.records import PostgresRecordsRepository
 from nango.server.health import HealthResponse
 from nango.server.settings import Settings
 from nango.utils.errors import ApplicationError
@@ -61,6 +62,8 @@ def create_app(
             )
             app.state.integration_repository = integration_repository
             public_api.integrations = integration_repository
+        if persist_service is None:
+            persist.records_repository = PostgresRecordsRepository(app.state.db_session_factory)
         try:
             yield
         finally:
@@ -73,6 +76,7 @@ def create_app(
         orchestrator = public_api_service.orchestrator
     else:
         orchestrator = OrchestratorService()
+    persist = persist_service or PersistService()
     public_api = public_api_service or PublicAPIService(
         orchestrator=orchestrator,
         integrations=InMemoryIntegrationConfigRepository(),
@@ -102,7 +106,7 @@ def create_app(
         )
 
     app.include_router(create_orchestrator_router(orchestrator))
-    app.include_router(create_persist_router(persist_service))
+    app.include_router(create_persist_router(persist))
 
     @app.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from nango.auth.models import (
@@ -23,11 +24,11 @@ from nango.server.settings import Settings
 AUTH_HEADER = {"Authorization": "Bearer test-secret"}
 
 
-def test_service_writes_lists_and_deletes_records() -> None:
+async def test_service_writes_lists_and_deletes_records() -> None:
     service = PersistService()
     auth = PersistAuthContext(environment_id=1, token="test-secret")
 
-    service.persist_records(
+    await service.persist_records(
         connection_id=10,
         sync_id="sync-1",
         sync_job_id=20,
@@ -41,21 +42,21 @@ def test_service_writes_lists_and_deletes_records() -> None:
         auth=auth,
         mode="save",
     )
-    listed = service.list_records(
+    listed = await service.list_records(
         connection_id=10,
         model="Contact",
         limit=100,
         cursor=None,
         include_deleted=False,
     )
-    deleted = service.delete_records(
+    deleted = await service.delete_records(
         connection_id=10,
         request=DeleteRecordsRequest.model_validate(
             {"model": "Contact", "externalIds": ["contact-1"]}
         ),
         auth=auth,
     )
-    after_delete = service.list_records(
+    after_delete = await service.list_records(
         connection_id=10,
         model="Contact",
         limit=100,
@@ -68,14 +69,21 @@ def test_service_writes_lists_and_deletes_records() -> None:
     assert after_delete.records == []
 
 
-def test_service_checkpoint_flow_and_daemon_placeholders() -> None:
+async def test_service_checkpoint_flow_and_daemon_placeholders() -> None:
     service = PersistService()
+    auth = PersistAuthContext(environment_id=1, token="test-secret")
 
-    checkpoint = service.save_checkpoint(
+    checkpoint = await service.save_checkpoint(
         connection_id=10,
         request=CheckpointRequest(model="Contact", key="sync", cursor="cursor-1"),
+        auth=auth,
     )
-    loaded = service.get_checkpoint(connection_id=10, model="Contact", key="sync")
+    loaded = await service.get_checkpoint(
+        connection_id=10,
+        model="Contact",
+        key="sync",
+        auth=auth,
+    )
 
     assert loaded == checkpoint
     assert service.prune_records().status == "noop"
@@ -219,3 +227,109 @@ async def test_persist_routes_write_list_delete_checkpoint_and_log() -> None:
     assert logged.status_code == 204
     assert deleted.json() == {"deleted": 1}
     assert pruned.json() == {"status": "noop"}
+
+
+async def test_persist_routes_use_db_backed_repository_when_configured() -> None:
+    pytest.importorskip("sqlalchemy")
+
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(
+            self,
+            *,
+            rows: list[dict[str, object]] | None = None,
+            row: dict[str, object] | None = None,
+        ) -> None:
+            self._rows = rows or ([] if row is None else [row])
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return self._rows
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.records = [
+                {
+                    "id": "record-1",
+                    "external_id": "contact-1",
+                    "connection_id": 10,
+                    "model": "Contact",
+                    "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                    "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                    "deleted_at": None,
+                    "sync_id": "sync-1",
+                    "sync_job_id": 20,
+                    "record_data": {"name": "Ada"},
+                    "metadata_json": {"source": "test"},
+                }
+            ]
+            self.checkpoint = {
+                "checkpoint": {"cursor": "cursor-1"},
+                "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+            }
+
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, query: object, params: dict[str, object]) -> FakeResult:
+            query_text = str(query)
+            if "FROM records AS r" in query_text and "LIMIT :limit" in query_text:
+                return FakeResult(rows=self.records)
+            if query_text.strip().startswith("INSERT INTO checkpoints"):
+                return FakeResult(row=self.checkpoint)
+            if "FROM checkpoints" in query_text:
+                return FakeResult(row=self.checkpoint)
+            if query_text.strip().startswith("UPDATE records"):
+                return FakeResult(rows=[{"id": "record-1"}])
+            if query_text.strip().startswith("INSERT INTO records_data"):
+                return FakeResult()
+            if query_text.strip().startswith("INSERT INTO records"):
+                return FakeResult()
+            return FakeResult()
+
+        async def commit(self) -> None:
+            return None
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    app = create_app(Settings(service_name="test-core", database_url="postgres://test"))
+
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        saved = await client.put(
+            "/persist/v1/environment/1/connection/10/checkpoint",
+            headers=AUTH_HEADER,
+            json={"model": "Contact", "key": "sync", "cursor": "cursor-1"},
+        )
+        loaded = await client.get(
+            "/persist/v1/environment/1/connection/10/checkpoint",
+            headers=AUTH_HEADER,
+            params={"model": "Contact", "key": "sync"},
+        )
+
+    assert saved.status_code == 200
+    assert loaded.status_code == 200
+    assert loaded.json()["checkpoint"]["cursor"] == "cursor-1"
+    monkeypatch.undo()
