@@ -81,7 +81,6 @@ async def deliver_webhook(
         timeout_seconds=timeout_seconds,
     )
 
-    last_error: WebhookDeliveryFailure | None = None
     for attempt in range(1, max_attempts + 1):
         try:
             if circuit_breaker:
@@ -96,7 +95,6 @@ async def deliver_webhook(
             raise WebhookHTTPStatusError(response.status_code)
         except Exception as exc:
             delivery_error = _delivery_error(exc)
-            last_error = delivery_error
 
             if circuit_breaker and not isinstance(delivery_error, CircuitOpenError):
                 circuit_breaker.record_failure(url)
@@ -106,7 +104,7 @@ async def deliver_webhook(
 
             await sleep(retry_delay_seconds)
 
-    return Err(last_error or WebhookDeliveryError("webhook_delivery_failed"))
+    raise RuntimeError("unreachable")
 
 
 def _body_string(payload: WebhookBody) -> str:

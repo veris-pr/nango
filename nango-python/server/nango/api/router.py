@@ -40,11 +40,11 @@ def create_public_api_router(service: PublicAPIService | None = None) -> APIRout
 
     @router.get("/integrations", response_model=IntegrationListResponse)
     async def list_integrations() -> IntegrationListResponse:
-        return IntegrationListResponse(data=api.list_integrations())
+        return IntegrationListResponse(data=await api.list_integrations())
 
     @router.get("/integrations/{provider_config_key}", response_model=IntegrationResponse)
     async def get_integration(provider_config_key: str) -> IntegrationResponse:
-        return IntegrationResponse(data=api.get_integration(provider_config_key))
+        return IntegrationResponse(data=await api.get_integration(provider_config_key))
 
     @router.post("/connect/sessions", response_model=ConnectSessionCreateResponse)
     async def create_connect_session(

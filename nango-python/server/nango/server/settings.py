@@ -13,6 +13,7 @@ class Settings(BaseModel):
     environment: str = Field(default="development", min_length=1)
     database_url: str | None = None
     redis_url: str | None = None
+    encryption_key: str = ""
     cutover_mode: CutoverMode = "disabled"
 
     @classmethod
@@ -20,8 +21,9 @@ class Settings(BaseModel):
         return cls(
             service_name=environ.get("NANGO_PYTHON_SERVICE_NAME", "nango-python-core"),
             environment=environ.get("NANGO_ENV", "development"),
-            database_url=environ.get("DATABASE_URL"),
+            database_url=environ.get("DATABASE_URL") or environ.get("NANGO_DATABASE_URL"),
             redis_url=environ.get("REDIS_URL"),
+            encryption_key=environ.get("NANGO_ENCRYPTION_KEY", ""),
             cutover_mode=cast(
                 CutoverMode,
                 environ.get("NANGO_PYTHON_CUTOVER_MODE", "disabled"),

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import Field
 
-from nango.contracts.base import ContractModel
+from nango.contracts.base import ContractModel, JsonObject
 from nango.records import ListRecordsResult, RecordCheckpoint
 
-type JsonObject = dict[str, Any]
 type PersistMode = Literal["save", "update"]
 
 

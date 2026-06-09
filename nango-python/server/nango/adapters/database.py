@@ -163,6 +163,13 @@ def connect_args(settings: DatabaseSettings) -> dict[str, Any]:
 
 
 def insecure_ssl_context() -> ssl.SSLContext:
+    """Return a DB SSL context for local development only.
+
+    Production must use verified certificates instead of disabling hostname and
+    certificate checks.
+    """
+    if environ.get("NANGO_ENV") == "production":
+        raise RuntimeError("insecure_ssl_context() cannot be used in production")
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from nango.orchestrator.events import InMemoryTaskEvents
 from nango.orchestrator.models import (
     DequeueRequest,
@@ -120,9 +122,12 @@ class OrchestratorService:
                 return self._scheduler.fail(task_id, request.output)
             case "CANCELLED":
                 return self._scheduler.cancel(task_id, request.output)
+            case _:
+                raise ValueError(f"Unsupported task state: {request.state}")
 
 
 def _payload_json(payload: object) -> object:
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(mode="json", by_alias=True, exclude_none=True)
+    model_dump = getattr(payload, "model_dump", None)
+    if callable(model_dump):
+        return cast(Any, payload).model_dump(mode="json", by_alias=True, exclude_none=True)
     return payload

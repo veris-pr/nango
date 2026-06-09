@@ -4,6 +4,12 @@ from datetime import UTC, datetime
 
 from httpx import ASGITransport, AsyncClient
 
+from nango.auth.models import (
+    AccountContext,
+    AccountSummary,
+    EnvironmentSummary,
+    SecretSummary,
+)
 from nango.persist import PersistService
 from nango.persist.models import (
     CheckpointRequest,
@@ -89,6 +95,67 @@ async def test_auth_placeholder_requires_bearer_token() -> None:
 
     assert missing.status_code == 401
     assert malformed.status_code == 401
+
+
+async def test_persist_auth_rejects_mismatched_environment_when_resolved() -> None:
+    class FakeAuthService:
+        async def get_account_context_by_api_key(
+            self,
+            *,
+            secret_key: str | None = None,
+            internal_secret_key: str | None = None,
+        ) -> AccountContext:
+            del secret_key, internal_secret_key
+
+            return AccountContext(
+                account=AccountSummary(
+                    id=1,
+                    createdAt=datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                    updatedAt=datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                ),
+                environment=EnvironmentSummary(
+                    id=2,
+                    name="dev",
+                    accountId=1,
+                    secretKey="test-secret",
+                    isProduction=False,
+                    createdAt=datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                    updatedAt=datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                ),
+                secret=SecretSummary(
+                    id=3,
+                    environmentId=2,
+                    displayName="default",
+                    secret="test-secret",
+                    hashed="hashed",
+                    isDefault=True,
+                    createdAt=datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                    updatedAt=datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                ),
+                authSource="api_secret",
+            )
+
+    app = create_app(Settings(service_name="test-core"))
+    async with app.router.lifespan_context(app):
+        app.state.auth_service = FakeAuthService()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                "/persist/v1/environment/1/connection/10/records",
+                headers=AUTH_HEADER,
+                params={"model": "Contact"},
+            )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": {
+            "error": {
+                "code": "unauthorized",
+                "message": "Unauthorized: Matching environment not found",
+            }
+        }
+    }
 
 
 async def test_persist_routes_write_list_delete_checkpoint_and_log() -> None:

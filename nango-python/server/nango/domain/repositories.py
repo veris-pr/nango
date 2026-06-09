@@ -1,7 +1,60 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from nango.domain.errors import integration_already_exists
 from nango.domain.models import Connection, IntegrationConfig, utc_now
+
+
+class IntegrationConfigRepository(Protocol):
+    def create(
+        self,
+        *,
+        environment_id: int,
+        provider_config_key: str,
+        provider: str,
+        oauth_client_id: str | None = None,
+        oauth_scopes: tuple[str, ...] = (),
+        forward_webhooks: bool = True,
+        missing_fields: tuple[str, ...] = (),
+    ) -> IntegrationConfig: ...
+
+    def get_by_key(
+        self,
+        *,
+        environment_id: int,
+        provider_config_key: str,
+    ) -> IntegrationConfig | None: ...
+
+    def get_id_by_key(self, *, environment_id: int, provider_config_key: str) -> int | None: ...
+
+    def list_for_environment(self, environment_id: int) -> tuple[IntegrationConfig, ...]: ...
+
+
+class ConnectionRepository(Protocol):
+    def upsert(
+        self,
+        *,
+        environment_id: int,
+        config_id: int,
+        provider_config_key: str,
+        connection_id: str,
+        credentials: dict[str, object],
+        connection_config: dict[str, object] | None = None,
+        metadata: dict[str, object] | None = None,
+        tags: dict[str, str] | None = None,
+        private_key_id: int | None = None,
+    ) -> tuple[Connection, str]: ...
+
+    def update_private_key_id(self, connection: Connection, private_key_id: int) -> Connection: ...
+
+    def get_by_id(
+        self,
+        *,
+        environment_id: int,
+        provider_config_key: str,
+        connection_id: str,
+    ) -> Connection | None: ...
 
 
 class InMemoryIntegrationConfigRepository:
@@ -89,7 +142,7 @@ class InMemoryConnectionRepository:
         resolved_connection_config = connection_config
         if resolved_connection_config is None and existing is not None:
             resolved_connection_config = existing.connection_config
-        resolved_metadata = metadata if metadata is not None else None
+        resolved_metadata = metadata
         if resolved_metadata is None and existing is not None:
             resolved_metadata = existing.metadata
         resolved_tags = tags if tags is not None else {}

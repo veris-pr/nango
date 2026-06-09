@@ -1,3 +1,9 @@
+"""Keystore hashing helpers.
+
+The PBKDF2 salt intentionally reuses the shared encryption key so hashes remain
+compatible with the existing TypeScript implementation during the migration.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -15,6 +21,8 @@ def generate_private_key_value(entity_type: str, *, prefix: str = "nango") -> st
 
 
 def hash_private_key_value(key_value: str, encryption_key: str) -> str:
+    if not encryption_key:
+        return key_value
     digest = hashlib.pbkdf2_hmac(
         "sha256",
         key_value.encode("utf-8"),

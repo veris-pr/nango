@@ -1,4 +1,8 @@
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
+
+type JsonObject = dict[str, Any]
 
 
 class ContractModel(BaseModel):

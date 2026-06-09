@@ -67,7 +67,7 @@ class JobsProcessorService:
             await self._dispatch_webhook_task(task, payload)
             return
 
-        await self._fail_task(task.id, f"unsupported task type: {task_type}")
+        self._fail_task(task.id, f"unsupported task type: {task_type}")
 
     def heartbeat(self, task_id: str) -> None:
         self._orchestrator.heartbeat(task_id)
@@ -82,14 +82,14 @@ class JobsProcessorService:
         result = await adapter.invoke(invocation)
 
         if isinstance(result, Err):
-            await self._fail_task(task.id, str(result.error))
+            self._fail_task(task.id, str(result.error))
             return
         if result.value is False:
-            await self._fail_task(task.id, "runner did not start task")
+            self._fail_task(task.id, "runner did not start task")
 
     async def _dispatch_webhook_task(self, task: Task, payload: Mapping[str, Any]) -> None:
         if self._webhook_sender is None:
-            await self._fail_task(task.id, "webhook sender is not configured")
+            self._fail_task(task.id, "webhook sender is not configured")
             return
 
         dispatch = WebhookDispatch.model_validate(payload.get("input"))
@@ -109,9 +109,9 @@ class JobsProcessorService:
             )
             return
 
-        await self._fail_task(task.id, str(result.error))
+        self._fail_task(task.id, str(result.error))
 
-    async def _fail_task(self, task_id: str, message: str) -> None:
+    def _fail_task(self, task_id: str, message: str) -> None:
         self._transition_once(
             task_id,
             TaskTransitionRequest(

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import Field
 
-from nango.contracts.base import ContractModel
+from nango.contracts.base import ContractModel, JsonObject
 
-type JsonObject = dict[str, Any]
 type RecordAction = Literal["ADDED", "UPDATED", "DELETED"]
 
 

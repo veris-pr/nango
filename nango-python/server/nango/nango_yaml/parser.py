@@ -436,9 +436,9 @@ class NangoYamlV2Parser:
     ) -> ParsedNangoSync | None:
         if not self._valid_script(integration_name, "syncs", sync_name, raw_sync):
             return None
-        assert isinstance(raw_sync, Mapping)
+        sync_mapping = cast(RawMap, raw_sync)
 
-        raw_output = raw_sync.get("output")
+        raw_output = sync_mapping.get("output")
         if raw_output is None:
             self.errors.append(
                 ParserIssue(
@@ -451,29 +451,29 @@ class NangoYamlV2Parser:
 
         output_models = self._models_for_output(raw_output, sync_name, "sync", integration_name)
         input_model = self._model_for_input(
-            raw_sync.get("input"), sync_name, "sync", integration_name
+            sync_mapping.get("input"), sync_name, "sync", integration_name
         )
         endpoints = self._parse_sync_endpoints(
-            raw_sync.get("endpoint"), len(output_models), integration_name, sync_name
+            sync_mapping.get("endpoint"), len(output_models), integration_name, sync_name
         )
-        webhook_subscriptions = _string_tuple(raw_sync.get("webhook-subscriptions"))
+        webhook_subscriptions = _string_tuple(sync_mapping.get("webhook-subscriptions"))
         used_models = self._used_model_names(
             (*output_models, *(tuple([input_model]) if input_model else ()))
         )
 
         return ParsedNangoSync(
             name=sync_name,
-            description=str(raw_sync.get("description") or "").strip(),
-            runs=str(raw_sync.get("runs") or ""),
-            version=str(raw_sync.get("version") or ""),
+            description=str(sync_mapping.get("description") or "").strip(),
+            runs=str(sync_mapping.get("runs") or ""),
+            version=str(sync_mapping.get("version") or ""),
             sync_type="incremental"
-            if str(raw_sync.get("sync_type") or "").lower() == "incremental"
+            if str(sync_mapping.get("sync_type") or "").lower() == "incremental"
             else "full",
-            track_deletes=bool(raw_sync.get("track_deletes") or False),
-            auto_start=raw_sync.get("auto_start") is not False,
+            track_deletes=bool(sync_mapping.get("track_deletes") or False),
+            auto_start=sync_mapping.get("auto_start") is not False,
             input=input_model.name if input_model else None,
             output=tuple(model.name for model in output_models),
-            scopes=_scopes(raw_sync.get("scopes")),
+            scopes=_scopes(sync_mapping.get("scopes")),
             endpoints=endpoints,
             webhookSubscriptions=webhook_subscriptions,
             usedModels=used_models,
@@ -484,16 +484,16 @@ class NangoYamlV2Parser:
     ) -> ParsedNangoAction | None:
         if not self._valid_script(integration_name, "actions", action_name, raw_action):
             return None
-        assert isinstance(raw_action, Mapping)
+        action_mapping = cast(RawMap, raw_action)
 
         output_models = self._models_for_output(
-            raw_action.get("output"), action_name, "action", integration_name
+            action_mapping.get("output"), action_name, "action", integration_name
         )
         input_model = self._model_for_input(
-            raw_action.get("input"), action_name, "action", integration_name
+            action_mapping.get("input"), action_name, "action", integration_name
         )
         endpoint = self._parse_endpoint(
-            raw_action.get("endpoint"), "POST", integration_name, "actions", action_name
+            action_mapping.get("endpoint"), "POST", integration_name, "actions", action_name
         )
         used_models = self._used_model_names(
             (*output_models, *(tuple([input_model]) if input_model else ()))
@@ -501,9 +501,9 @@ class NangoYamlV2Parser:
 
         return ParsedNangoAction(
             name=action_name,
-            description=str(raw_action.get("description") or "").strip(),
-            version=str(raw_action.get("version") or ""),
-            scopes=_scopes(raw_action.get("scopes")),
+            description=str(action_mapping.get("description") or "").strip(),
+            version=str(action_mapping.get("version") or ""),
+            scopes=_scopes(action_mapping.get("scopes")),
             input=input_model.name if input_model else None,
             output=tuple(model.name for model in output_models) or None,
             endpoint=endpoint,

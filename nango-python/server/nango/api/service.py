@@ -18,9 +18,13 @@ from nango.contracts.connect import (
     ConnectSessionCreateResponse,
     ConnectSessionToken,
 )
-from nango.domain.errors import integration_not_found, provider_not_found
+from nango.domain.errors import integration_not_found
 from nango.domain.models import IntegrationConfig
-from nango.domain.repositories import InMemoryIntegrationConfigRepository
+from nango.domain.postgres_repositories import PostgresIntegrationConfigRepository
+from nango.domain.repositories import (
+    InMemoryIntegrationConfigRepository,
+    IntegrationConfigRepository,
+)
 from nango.domain.services import DeployMetadataService, ProviderResolver
 from nango.nango_yaml import ParserIssue, validate_nango_yaml_text
 from nango.orchestrator import OrchestratorService
@@ -29,6 +33,8 @@ from nango.utils.errors import ApplicationError
 
 CONNECT_SESSION_TOKEN_PREFIX = "nango_connect_session_"
 CONNECT_SESSION_TTL = timedelta(hours=1)
+
+IntegrationRepository = IntegrationConfigRepository | PostgresIntegrationConfigRepository
 
 
 class InMemoryConnectSessionRepository:
@@ -67,12 +73,14 @@ class PublicAPIService:
         self,
         *,
         providers: ProviderCatalog | None = None,
-        integrations: InMemoryIntegrationConfigRepository | None = None,
+        integrations: IntegrationRepository | None = None,
         connect_sessions: InMemoryConnectSessionRepository | None = None,
         orchestrator: OrchestratorService | None = None,
     ) -> None:
         self._providers = providers
-        self.integrations = integrations or InMemoryIntegrationConfigRepository()
+        self.integrations: IntegrationRepository = (
+            integrations or InMemoryIntegrationConfigRepository()
+        )
         self.connect_sessions = connect_sessions or InMemoryConnectSessionRepository()
         self.orchestrator = orchestrator or OrchestratorService()
         self.provider_resolver = ProviderResolver(providers)
@@ -90,26 +98,29 @@ class PublicAPIService:
         ]
 
     def get_provider(self, provider_name: str) -> dict[str, object]:
-        try:
-            provider = self.provider_resolver.resolve(provider_name)
-        except ApplicationError:
-            raise
-        if provider is None:
-            raise provider_not_found(provider_name)
+        provider = self.provider_resolver.resolve(provider_name)
         return {"provider": provider_name, **provider}
 
-    def list_integrations(self, environment_id: int = 1) -> list[IntegrationConfig]:
+    async def list_integrations(self, environment_id: int = 1) -> list[IntegrationConfig]:
+        if isinstance(self.integrations, PostgresIntegrationConfigRepository):
+            return list(await self.integrations.list_for_environment(environment_id))
         return list(self.integrations.list_for_environment(environment_id))
 
-    def get_integration(
+    async def get_integration(
         self,
         provider_config_key: str,
         environment_id: int = 1,
     ) -> IntegrationConfig:
-        integration = self.integrations.get_by_key(
-            environment_id=environment_id,
-            provider_config_key=provider_config_key,
-        )
+        if isinstance(self.integrations, PostgresIntegrationConfigRepository):
+            integration = await self.integrations.get_by_key(
+                environment_id=environment_id,
+                provider_config_key=provider_config_key,
+            )
+        else:
+            integration = self.integrations.get_by_key(
+                environment_id=environment_id,
+                provider_config_key=provider_config_key,
+            )
         if integration is None:
             raise integration_not_found(provider_config_key)
         return integration

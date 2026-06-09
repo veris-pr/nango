@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from nango.api import PublicAPIService
@@ -63,6 +66,87 @@ async def test_integration_routes_list_read_and_error_envelope() -> None:
             "message": 'Integration "missing" was not found',
         }
     }
+
+
+async def test_integration_routes_use_db_backed_repository_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class FakeResult:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return self._rows
+
+        def first(self) -> dict[str, object] | None:
+            return self._rows[0] if self._rows else None
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, _query: object, params: dict[str, object]) -> FakeResult:
+            if params == {"environment_id": 1}:
+                return FakeResult(
+                    [
+                        {
+                            "id": 1,
+                            "environment_id": 1,
+                            "unique_key": "github-prod",
+                            "provider": "github",
+                            "oauth_client_id": "client-id",
+                            "oauth_scopes": "repo,read:user",
+                            "forward_webhooks": True,
+                            "missing_fields": ["oauth_client_id"],
+                            "created_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                            "updated_at": datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC),
+                        }
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSessionFactory:
+        def __call__(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("nango.server.app.create_engine", lambda _settings: FakeEngine())
+    monkeypatch.setattr(
+        "nango.server.app.create_session_factory",
+        lambda _engine: FakeSessionFactory(),
+    )
+
+    app = create_app(Settings(service_name="test-core", database_url="postgres://test"))
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        listed = await client.get("/integrations")
+
+    assert listed.status_code == 200
+    assert listed.json()["data"] == [
+        {
+            "id": 1,
+            "environmentId": 1,
+            "providerConfigKey": "github-prod",
+            "provider": "github",
+            "oauthClientId": "client-id",
+            "oauthScopes": ["repo", "read:user"],
+            "forwardWebhooks": True,
+            "missingFields": ["oauth_client_id"],
+            "createdAt": "2025-01-02T03:04:05Z",
+            "updatedAt": "2025-01-02T03:04:05Z",
+        }
+    ]
 
 
 async def test_connect_session_create_and_get_token_shape() -> None:

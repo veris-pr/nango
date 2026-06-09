@@ -12,8 +12,10 @@ from nango.domain.models import (
     IntegrationConfig,
 )
 from nango.domain.repositories import (
+    ConnectionRepository,
     InMemoryConnectionRepository,
     InMemoryIntegrationConfigRepository,
+    IntegrationConfigRepository,
 )
 from nango.keystore import InMemoryPrivateKeyRepository, PrivateKeyEntityType
 from nango.nango_yaml import ParsedNangoYaml
@@ -36,7 +38,7 @@ class ProviderResolver:
 class IntegrationConfigService:
     def __init__(
         self,
-        repository: InMemoryIntegrationConfigRepository | None = None,
+        repository: IntegrationConfigRepository | None = None,
         provider_resolver: ProviderResolver | None = None,
     ) -> None:
         self.repository = repository or InMemoryIntegrationConfigRepository()
@@ -81,8 +83,8 @@ class ConnectionService:
     def __init__(
         self,
         *,
-        integration_repository: InMemoryIntegrationConfigRepository,
-        connection_repository: InMemoryConnectionRepository | None = None,
+        integration_repository: IntegrationConfigRepository,
+        connection_repository: ConnectionRepository | None = None,
         private_key_repository: InMemoryPrivateKeyRepository | None = None,
     ) -> None:
         self.integration_repository = integration_repository
