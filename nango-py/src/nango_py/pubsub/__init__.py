@@ -1,0 +1,1 @@
+"""Pubsub bounded context: event envelope + in-memory transport + publisher."""

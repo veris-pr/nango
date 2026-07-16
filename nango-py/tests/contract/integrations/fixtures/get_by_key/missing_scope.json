@@ -1,0 +1,24 @@
+{
+    "scenario": "missing_scope",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/github",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": {}
+    },
+    "seed": {
+        "account": { "id": 1, "name": "test-team", "uuid": "{{account_uuid}}" },
+        "environment": { "id": 1, "name": "dev", "account_id": 1, "uuid": "{{environment_uuid}}", "is_production": false },
+        "customer_key": { "id": 10, "key_type": "api", "scopes": ["environment:connections:read"], "entity_type": "environment", "entity_id": 1 }
+    },
+    "response": {
+        "status": 403,
+        "body": {
+            "error": {
+                "code": "forbidden",
+                "message": "Insufficient scope. Required one of: environment:integrations:read or environment:integrations:read_credentials"
+            }
+        }
+    },
+    "notes": "Authenticated but scopes do not include read or read_credentials and no environment:* wildcard."
+}

@@ -1,0 +1,36 @@
+{
+    "scenario": "unknown_provider",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/ghost",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": {}
+    },
+    "seed": {
+        "account": { "id": 1, "name": "test-team", "uuid": "{{account_uuid}}" },
+        "environment": { "id": 1, "name": "dev", "account_id": 1, "uuid": "{{environment_uuid}}", "is_production": false },
+        "customer_key": { "id": 10, "key_type": "api", "scopes": ["environment:integrations:read"], "entity_type": "environment", "entity_id": 1 },
+        "integration": {
+            "id": 102,
+            "unique_key": "ghost",
+            "provider": "ghost-provider-not-in-catalog",
+            "environment_id": 1,
+            "oauth_client_id": null,
+            "oauth_client_secret": null,
+            "display_name": null,
+            "forward_webhooks": true,
+            "shared_credentials_id": null,
+            "deleted": false
+        }
+    },
+    "response": {
+        "status": 404,
+        "body": {
+            "error": {
+                "code": "not_found",
+                "message": "Unknown provider ghost-provider-not-in-catalog"
+            }
+        }
+    },
+    "notes": "Integration row exists but provider name is absent from providers.yaml catalog."
+}

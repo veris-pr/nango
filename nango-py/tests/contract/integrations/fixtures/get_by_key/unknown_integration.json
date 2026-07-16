@@ -1,0 +1,24 @@
+{
+    "scenario": "unknown_integration",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/does-not-exist",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": {}
+    },
+    "seed": {
+        "account": { "id": 1, "name": "test-team", "uuid": "{{account_uuid}}" },
+        "environment": { "id": 1, "name": "dev", "account_id": 1, "uuid": "{{environment_uuid}}", "is_production": false },
+        "customer_key": { "id": 10, "key_type": "api", "scopes": ["environment:integrations:read"], "entity_type": "environment", "entity_id": 1 }
+    },
+    "response": {
+        "status": 404,
+        "body": {
+            "error": {
+                "code": "not_found",
+                "message": "Integration \"does-not-exist\" does not exist"
+            }
+        }
+    },
+    "notes": "Auth succeeds and scope holds; _nango_configs has no row for unique_key in this environment."
+}

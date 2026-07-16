@@ -1,0 +1,21 @@
+{
+    "scenario": "unknown_account",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/github",
+        "headers": { "Authorization": "Bearer 00000000-0000-4000-8000-000000000000" },
+        "query": {}
+    },
+    "seed": null,
+    "response": {
+        "status": 401,
+        "body": {
+            "error": {
+                "message": "Authentication failed. The provided authorization header does not match any account.",
+                "code": "unknown_account",
+                "payload": {}
+            }
+        }
+    },
+    "notes": "Valid UUID v4 format but no matching customer_key/api_secret/env_var."
+}

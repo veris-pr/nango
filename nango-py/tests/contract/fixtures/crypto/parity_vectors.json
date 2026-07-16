@@ -1,0 +1,30 @@
+{
+    "pbkdf2": [
+        {
+            "plaintext": "nango_connect_session_abcdef",
+            "encryption_key": "test-encryption-key",
+            "hash": "MboriZDg73s23cGPxPk+rOLeyMzd3kq1qSjrOLJVQtQ="
+        },
+        {
+            "plaintext": "11111111-1111-4111-8111-111111111111",
+            "encryption_key": "EnK3hn3VlrXsQ3QI3J9ozbTxgVolLD7XWJXABt0R4i0=",
+            "hash": "Z7w01u+QfTgP3C5jcqpZNaVkXHiPBNmhkZbMInNJPYs="
+        }
+    ],
+    "aes_gcm": [
+        {
+            "plaintext": "super-secret-api-key-value",
+            "key_base64": "EnK3hn3VlrXsQ3QI3J9ozbTxgVolLD7XWJXABt0R4i0=",
+            "ciphertext": "AkO0Kuz5DE+TnOCKf7e9A+v722leg+LF/8U=",
+            "iv": "MDEyMzQ1Njc4OWFi",
+            "tag": "v8b1n9ARh5N+pxePt2dAAw=="
+        },
+        {
+            "plaintext": "{\"apiKey\":\"abc\",\"token\":\"def\"}",
+            "key_base64": "EnK3hn3VlrXsQ3QI3J9ozbTxgVolLD7XWJXABt0R4i0=",
+            "ciphertext": "dkYYk1zIY8ut0SGQmVnpzqDV7AE0/cHAmlxaf9Y2",
+            "iv": "eZ7yMuoV/MVcHHBC",
+            "tag": "BuvN2t0HcooIDrtohno7xA=="
+        }
+    ]
+}

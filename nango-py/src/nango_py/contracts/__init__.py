@@ -1,0 +1,1 @@
+"""Contract DTOs (Pydantic models) for boundary serialization."""

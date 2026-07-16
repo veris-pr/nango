@@ -1,0 +1,21 @@
+{
+    "scenario": "missing_auth",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/github",
+        "headers": {},
+        "query": {}
+    },
+    "seed": null,
+    "response": {
+        "status": 401,
+        "body": {
+            "error": {
+                "message": "Authentication failed. The request is missing the Authorization header.",
+                "code": "missing_auth_header",
+                "payload": {}
+            }
+        }
+    },
+    "notes": "No Authorization header."
+}

@@ -1,0 +1,1 @@
+"""Connections infrastructure: SQLAlchemy repository against the migrated schema."""

@@ -1,0 +1,1 @@
+"""Connect sessions infrastructure: SQLAlchemy repository."""

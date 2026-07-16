@@ -1,0 +1,10 @@
+models:
+    IssueWithoutId:
+        title: string
+integrations:
+    github-demo:
+        syncs:
+            issues:
+                runs: every day
+                output: IssueWithoutId
+                endpoint: /issues

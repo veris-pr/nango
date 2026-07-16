@@ -1,6 +1,8 @@
 # Python core contract inventory
 
-This document freezes the first-pass TypeScript contract inventory for a future Python core migration. It is an implementation reference, not a Python implementation plan. Do not start Python code from this document alone; use it to define compatibility tests and fixture coverage first.
+**Status:** Contract reference for the active `nango-py/` implementation. See [Python core implementation plan](./PythonCoreImplementationPlan.md) for execution status and gates. The previous broad prototype is archived under `python-core-spike/`.
+
+This document freezes the first-pass TypeScript contract inventory for the Python core migration. It is an implementation reference, not an implementation plan. Do not start a boundary from this document alone; generate authoritative TypeScript fixtures and satisfy the plan's compatibility gates first.
 
 ## Scope decisions
 
@@ -380,7 +382,8 @@ Create fixtures before starting Python implementation. Suggested first pass:
 
 ## Open migration follow-ups
 
-- Decide whether Python core will expose all TypeScript public endpoints directly or sit behind the existing TypeScript API during transition.
+Cutover topology is resolved: Python will replace the TypeScript backend in one coordinated release after offline parity and full-system readiness. No TypeScript facade, production shadowing, canary, or traffic split is planned.
+
 - Define exact golden fixture storage location and update test runners before writing Python code.
 - Split billing-specific code paths from usage/metering where legacy names such as the `billing` consumer group are only incidental.
 - Decide the target Postgres operational log schema before replacing any ES-backed log read/write path.

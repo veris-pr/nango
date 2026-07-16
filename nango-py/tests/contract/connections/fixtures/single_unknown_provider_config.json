@@ -1,0 +1,19 @@
+{
+    "scenario": "single_unknown_provider_config",
+    "request": {
+        "method": "GET",
+        "path": "/connections/conn-1",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": { "provider_config_key": "ghost" }
+    },
+    "seed": {
+        "account": { "id": 1 },
+        "environment": { "id": 1, "account_id": 1 },
+        "customer_key": { "id": 10, "scopes": ["environment:connections:read"] }
+    },
+    "response": {
+        "status": 400,
+        "body": { "error": { "code": "unknown_provider_config", "message": "Provider does not exists" } }
+    },
+    "notes": "No _nango_configs row for provider_config_key in this environment."
+}

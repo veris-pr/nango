@@ -1,0 +1,67 @@
+{
+    "scenario": "success_webhook_include",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/airtable",
+        "headers": {
+            "Authorization": "Bearer {{secret_key}}"
+        },
+        "query": {
+            "include": ["webhook"]
+        }
+    },
+    "seed": {
+        "account": {
+            "id": 1,
+            "name": "test-team",
+            "uuid": "{{account_uuid}}"
+        },
+        "environment": {
+            "id": 1,
+            "name": "dev",
+            "account_id": 1,
+            "uuid": "{{environment_uuid}}",
+            "is_production": false
+        },
+        "customer_key": {
+            "id": 10,
+            "key_type": "api",
+            "scopes": ["environment:integrations:read"],
+            "entity_type": "environment",
+            "entity_id": 1
+        },
+        "integration": {
+            "id": 100,
+            "unique_key": "airtable",
+            "provider": "airtable",
+            "environment_id": 1,
+            "oauth_client_id": "client-123",
+            "oauth_client_secret": "secret-456",
+            "oauth_scopes": "repo,user",
+            "display_name": "Airtable",
+            "forward_webhooks": true,
+            "shared_credentials_id": null,
+            "deleted": false
+        },
+        "provider": {
+            "name": "airtable",
+            "webhook_routing_script": "airtableWebhookRouting"
+        }
+    },
+    "response": {
+        "status": 200,
+        "body": {
+            "data": {
+                "unique_key": "airtable",
+                "provider": "airtable",
+                "display_name": "Airtable",
+                "logo": "{{base_public_url}}/images/template-logos/airtable.svg",
+                "forward_webhooks": true,
+                "created_at": "{{created_at}}",
+                "updated_at": "{{updated_at}}",
+                "webhook_url": "{{webhook_receive_url}}/{{environment_uuid}}/airtable"
+            }
+        }
+    },
+    "notes": "webhook include requested; provider has webhook_routing_script so webhook_url is populated."
+}

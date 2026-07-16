@@ -1,0 +1,1 @@
+"""Jobs bounded context: task dispatch + Node runner integration."""

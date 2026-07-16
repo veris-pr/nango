@@ -1,0 +1,1 @@
+"""Auth application layer: gateway ports and use cases."""

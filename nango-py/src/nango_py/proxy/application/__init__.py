@@ -1,0 +1,1 @@
+"""Proxy application: ProxyRequest use case and response model."""

@@ -1,0 +1,63 @@
+{
+    "scenario": "list_filtered_by_integration_and_search",
+    "request": {
+        "method": "GET",
+        "path": "/connections",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": { "integrationId": "github,slack", "search": "ada" }
+    },
+    "seed": {
+        "account": { "id": 1 },
+        "environment": { "id": 1, "account_id": 1 },
+        "customer_key": { "id": 10, "scopes": ["environment:connections:list"] },
+        "integrations": [
+            { "id": 100, "unique_key": "github", "provider": "github", "environment_id": 1 },
+            { "id": 101, "unique_key": "slack", "provider": "slack", "environment_id": 1 }
+        ],
+        "connections": [
+            {
+                "id": 500,
+                "connection_id": "conn-1",
+                "provider_config_key": "github",
+                "config_id": 100,
+                "environment_id": 1,
+                "tags": {},
+                "metadata": null,
+                "end_user": { "end_user_id": "eu-1", "display_name": "Ada Lovelace", "email": "ada@example.com" },
+                "active_logs": [],
+                "created_at": "{{created_at}}"
+            },
+            {
+                "id": 501,
+                "connection_id": "conn-2",
+                "provider_config_key": "slack",
+                "config_id": 101,
+                "environment_id": 1,
+                "tags": {},
+                "metadata": null,
+                "end_user": null,
+                "active_logs": [],
+                "created_at": "{{created_at_2}}"
+            }
+        ]
+    },
+    "response": {
+        "status": 200,
+        "body": {
+            "connections": [
+                {
+                    "id": 500,
+                    "connection_id": "conn-1",
+                    "provider_config_key": "github",
+                    "provider": "github",
+                    "errors": [],
+                    "end_user": { "id": "eu-1", "display_name": "Ada Lovelace", "email": "ada@example.com", "tags": null, "organization": null },
+                    "tags": {},
+                    "metadata": null,
+                    "created": "{{created_at}}"
+                }
+            ]
+        }
+    },
+    "notes": "integrationId split on comma → integrationIds filter; search matches connection_id/display_name/email ILIKE. conn-2 excluded (no end_user, search 'ada' misses)."
+}

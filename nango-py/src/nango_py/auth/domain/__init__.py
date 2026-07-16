@@ -1,0 +1,1 @@
+"""Auth domain model: contexts, scopes, and typed auth failures."""

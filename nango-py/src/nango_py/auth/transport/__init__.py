@@ -1,0 +1,1 @@
+"""Auth transport: HTTP dependency that resolves an AuthenticatedContext."""

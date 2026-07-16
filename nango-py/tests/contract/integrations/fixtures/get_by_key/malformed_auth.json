@@ -1,0 +1,21 @@
+{
+    "scenario": "malformed_auth",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/github",
+        "headers": { "Authorization": "Basic not-a-bearer" },
+        "query": {}
+    },
+    "seed": null,
+    "response": {
+        "status": 401,
+        "body": {
+            "error": {
+                "message": "Authentication failed. The Authorization header is malformed.",
+                "code": "malformed_auth_header",
+                "payload": {}
+            }
+        }
+    },
+    "notes": "Authorization header present but 'Bearer ' split yields empty token."
+}

@@ -1,0 +1,1 @@
+"""Auth infrastructure: SQLAlchemy adapter against the migrated schema."""

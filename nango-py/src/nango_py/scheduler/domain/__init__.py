@@ -1,0 +1,1 @@
+"""Scheduler domain model: Task, Schedule, state enums."""

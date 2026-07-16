@@ -1,0 +1,14 @@
+models:
+    Issue:
+        id: string
+integrations:
+    github-demo:
+        syncs:
+            issues:
+                runs: every day
+                output: Issue
+                endpoint: GET /issues
+        actions:
+            getIssue:
+                output: Issue
+                endpoint: GET /issues

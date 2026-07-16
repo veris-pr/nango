@@ -1,0 +1,1 @@
+"""Shared kernel: error protocol shared across bounded contexts."""

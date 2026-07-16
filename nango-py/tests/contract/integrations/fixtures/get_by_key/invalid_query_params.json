@@ -1,0 +1,30 @@
+{
+    "scenario": "invalid_query_params",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/github",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": { "include": "bogus" }
+    },
+    "seed": {
+        "account": { "id": 1, "name": "test-team", "uuid": "{{account_uuid}}" },
+        "environment": { "id": 1, "name": "dev", "account_id": 1, "uuid": "{{environment_uuid}}", "is_production": false },
+        "customer_key": { "id": 10, "key_type": "api", "scopes": ["environment:integrations:read"], "entity_type": "environment", "entity_id": 1 }
+    },
+    "response": {
+        "status": 400,
+        "body": {
+            "error": {
+                "code": "invalid_query_params",
+                "errors": [
+                    {
+                        "code": "invalid_enum_value",
+                        "message": "Invalid input: expected 'webhook' | 'credentials', received 'bogus'",
+                        "path": ["include"]
+                    }
+                ]
+            }
+        }
+    },
+    "notes": "include value not in {'webhook','credentials'} enum. Exact zod issue code/message produced by the TS zod version; differential harness normalizes message text but keeps code+path."
+}

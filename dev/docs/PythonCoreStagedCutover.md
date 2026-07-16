@@ -1,64 +1,95 @@
-# Python core staged cutover and rollback
+# Python core full replacement and rollback
 
-This document defines a safe foundation for moving Nango traffic from the existing TypeScript services to the Python core one service or route family at a time. It is not a production deployment plan and does not add live routing, proxying, telemetry, billing, or deployment manifest changes.
+**Status:** Guardrail for the active `nango-py/` implementation. Execution order and readiness live in [Python core implementation plan](./PythonCoreImplementationPlan.md). `python-core-spike/` is archived and is not eligible for deployment.
 
-For the separate checklist that must be satisfied before any TypeScript core service code is deleted, see [TypeScript core retirement readiness](./PythonCoreTypescriptRetirement.md).
+## Replacement decision
 
-## Cutover model
+Nango will not split, mirror, shadow, or canary production traffic between TypeScript and Python. Python is developed and verified offline until the complete replacement scope is ready. Cutover then replaces the TypeScript backend with Python in one coordinated release.
 
-Use a strangler pattern: keep TypeScript as the source of truth, then evaluate Python compatibility by route family before any route becomes active.
+Incremental vertical slices remain the development method, not the deployment method. No Python slice receives production traffic before full-replacement readiness is approved.
 
-1. **Service boundary selection**: choose one boundary such as health, orchestrator, persist, or a public API route family. Do not mix unrelated boundaries in the same cutover.
-2. **Contract parity**: confirm request and response DTOs, auth headers, status codes, error envelopes, and JSON field casing match the TypeScript service.
-3. **Shadow validation**: send representative non-customer-impacting requests or replay fixtures to Python while TypeScript still serves production traffic.
-4. **Canary validation**: allow a small, explicitly configured route family or environment to use Python after the shadow checks pass.
-5. **Active cutover**: route the selected boundary to Python only after validation gates are green and rollback has been rehearsed.
+TypeScript remains buildable and deployable as an emergency rollback artifact during a defined stabilization window. It serves no traffic after successful cutover unless rollback is triggered.
 
-Do not introduce a generic proxy layer as part of this foundation. Any future live router should be reviewed separately with service-specific ownership and rollback criteria.
+## Pre-cutover validation gates
 
-## Cutover mode flag
+Before scheduling replacement, all required backend boundaries must satisfy:
 
-The Python core exposes its requested cutover mode through `GET /health` so deployment and smoke-check tooling can verify intent without scraping process configuration.
+- TypeScript-generated contract fixtures pass against Python for public APIs, internal APIs, events, storage, webhooks, auth, errors, headers, and JSON casing.
+- Full TypeScript/Python differential suite has no unexplained delta.
+- Python integration tests pass against app, records, scheduler, keystore, and usage schemas produced by current authoritative migrations.
+- Existing TypeScript SDKs, UIs, CLI, and Node runner pass end-to-end tests against Python.
+- Cross-runtime storage tests prove TypeScript can read Python writes and Python can read TypeScript writes.
+- Concurrency, idempotency, timeout, retry, recovery, and failure-injection tests pass.
+- Production-scale load tests meet agreed latency, throughput, resource, and queue-backlog limits.
+- Backup and restore are tested against a production-like dataset.
+- Python deployment manifests, health checks, logs, alerts, runbooks, and ownership are complete.
+- A non-production release rehearsal executes the exact replacement and rollback procedures.
+- TypeScript rollback images and configuration are immutable, available, and verified.
 
-| Environment variable        | Allowed values                           | Default    | Meaning                                                             |
-| --------------------------- | ---------------------------------------- | ---------- | ------------------------------------------------------------------- |
-| `NANGO_PYTHON_CUTOVER_MODE` | `disabled`, `shadow`, `canary`, `active` | `disabled` | Declares the process cutover intent for status and validation only. |
+Passing unit tests or package builds alone never authorizes cutover.
 
-Mode semantics:
+## Full replacement runbook
 
-- `disabled`: Python is available for local/dev validation only. TypeScript services remain authoritative.
-- `shadow`: Python may receive fixture or mirrored validation traffic, but responses must not affect customers.
-- `canary`: a narrowly scoped service or route family may be directed to Python by external routing configuration.
-- `active`: the selected route family is expected to be served by Python, with rollback ready.
+Use one planned maintenance/release window:
 
-The mode is metadata only. It does not perform live routing, proxying, traffic splitting, or failover.
+1. Announce the change window and freeze unrelated deploys and schema changes.
+2. Confirm Python and rollback artifacts match the approved release candidates.
+3. Confirm backups and rollback checkpoints are current.
+4. Drain or pause work that cannot safely run in both implementations, including queued jobs and scheduled execution as defined by the operations runbook.
+5. Stop TypeScript backend processes in dependency order.
+6. Start Python backend processes using the same external contracts and approved storage.
+7. Run blocking health, migration-state, queue, auth, API, persist, scheduler, jobs, Node runner, webhook, and usage smoke checks.
+8. Resume paused work only after all blocking checks pass.
+9. Record cutover time, artifact versions, DB checkpoint, operators, and smoke results.
+10. Begin the stabilization window with enhanced operational monitoring.
 
-## Validation gates
+No request-level traffic splitter, route proxy, or dual-serving mode is introduced.
 
-Before moving a boundary to the next mode, validate:
+## Rollback triggers
 
-- `GET /health` returns `status: "ok"`, the expected `service`, and the expected `cutover_mode`.
-- Python contract fixtures pass: `python scripts/check_contract_fixtures.py`.
-- Python quality checks pass from `nango-python/server`: `python -m ruff check .`, `python -m mypy`, and `python -m pytest`.
-- Route-specific fixture or smoke tests confirm TypeScript-compatible status codes, error shapes, headers, auth behavior, and JSON casing.
-- TypeScript remains available for the same route family until active cutover is complete and rollback is no longer needed.
+Rollback first when any agreed trigger occurs during stabilization:
+
+- authentication or authorization bypass/failure
+- data corruption, cross-tenant access, or incompatible writes
+- repeated customer-facing contract failures
+- queue/task loss, stuck execution, or invalid state transitions
+- material error-rate, latency, or resource regression
+- inability to diagnose customer-impacting failures with available logs
+
+Investigation follows rollback unless continuing Python is demonstrably safer than reverting.
 
 ## Rollback to TypeScript
 
-Rollback should be route-by-route and should not require rebuilding Python.
+Rollback must not require a rebuild or data migration:
 
-1. Change external routing for the affected service or route family back to the TypeScript service.
-2. Set `NANGO_PYTHON_CUTOVER_MODE=disabled` or `shadow` for the Python process at the next safe restart or config rollout.
-3. Verify the TypeScript health endpoint and route-specific smoke checks pass.
-4. Verify Python `GET /health` reports the downgraded mode if the process remains deployed.
-5. Keep Python available for fixture replay or investigation, but do not let Python responses affect customers while rollback is active.
+1. Pause new work and drain Python-owned work where safe.
+2. Stop Python backend processes.
+3. Start the verified TypeScript rollback artifacts with preserved configuration.
+4. Run blocking TypeScript health and end-to-end smoke checks.
+5. Confirm TypeScript reads data written since Python cutover.
+6. Resume work and verify queues, schedules, runner callbacks, and webhooks recover.
+7. Record incident window, trigger, affected data, artifact versions, and verification results.
+8. Keep Python disabled until root cause and compatibility impact are reviewed.
+
+If Python writes cannot be read safely by TypeScript, cutover readiness was not met. This is a release blocker, not a rollback-time migration task.
+
+## Stabilization and retirement
+
+The release owner must define stabilization duration before cutover. During that window:
+
+- TypeScript artifacts remain buildable, deployable, and protected from incompatible changes.
+- Python is the only active backend unless rollback occurs.
+- Customer-impacting incidents use the rollback triggers above.
+- Storage compatibility remains continuously verified.
+
+After the window closes with owner approval, TypeScript backend retirement may proceed under [TypeScript core retirement readiness](./PythonCoreTypescriptRetirement.md). Retained TypeScript SDKs, UIs, CLI, `nango-yaml`, runner SDK, and Node runner are not retirement candidates.
 
 ## Explicit non-scope
 
-- Billing migration and provider billing events are out of scope.
-- Telemetry, tracing, metrics exporters, monitoring pipelines, and BigQuery ingestion are out of scope.
-- This document does not modify production deployment manifests.
+- Billing migration and billing-provider events remain out of scope.
+- New telemetry, tracing, metrics exporters, monitoring pipelines, and BigQuery ingestion remain out of scope.
+- This document defines release requirements; deployment-manifest implementation is tracked by the implementation plan.
 
-## Logs compatibility note
+## Logs compatibility
 
-Python route implementations should preserve existing customer-visible log contracts where a migrated boundary already emits logs. Prefer compatibility with current operational log fields and error envelopes over adding new telemetry concepts. Elasticsearch compatibility may be needed for existing deployments, but adding new observability exporters is outside this staged cutover foundation.
+Python must preserve customer-visible log contracts and provide operational logs needed to diagnose replacement and rollback. Prefer compatibility with current fields and error envelopes over introducing new telemetry concepts. Elasticsearch compatibility may remain necessary for existing deployments; new observability exporters are outside this migration.

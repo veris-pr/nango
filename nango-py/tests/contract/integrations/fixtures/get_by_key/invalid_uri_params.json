@@ -1,0 +1,30 @@
+{
+    "scenario": "invalid_uri_params",
+    "request": {
+        "method": "GET",
+        "path": "/integrations/bad!key",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": {}
+    },
+    "seed": {
+        "account": { "id": 1, "name": "test-team", "uuid": "{{account_uuid}}" },
+        "environment": { "id": 1, "name": "dev", "account_id": 1, "uuid": "{{environment_uuid}}", "is_production": false },
+        "customer_key": { "id": 10, "key_type": "api", "scopes": ["environment:integrations:read"], "entity_type": "environment", "entity_id": 1 }
+    },
+    "response": {
+        "status": 400,
+        "body": {
+            "error": {
+                "code": "invalid_uri_params",
+                "errors": [
+                    {
+                        "code": "invalid_string",
+                        "message": "Invalid input: must match /^[a-zA-Z0-9~:.@ _-]+$/",
+                        "path": ["uniqueKey"]
+                    }
+                ]
+            }
+        }
+    },
+    "notes": "uniqueKey contains '!' which fails providerConfigKeySchema regex. Exact zod message normalized by differential harness."
+}

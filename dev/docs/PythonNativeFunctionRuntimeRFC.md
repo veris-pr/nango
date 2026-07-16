@@ -8,15 +8,16 @@ This is an evaluation document only. It does not implement a Python function run
 
 Billing and new telemetry work are out of scope for this RFC.
 
-Related migration guardrails:
+Related migration plan and guardrails:
 
-- [Python core staged cutover and rollback](./PythonCoreStagedCutover.md)
+- [Python core implementation plan](./PythonCoreImplementationPlan.md)
+- [Python core full replacement and rollback](./PythonCoreStagedCutover.md)
 - [TypeScript core retirement readiness](./PythonCoreTypescriptRetirement.md)
 - [Python core contract inventory](./PythonCoreContractInventory.md)
 
 ## Problem statement
 
-Nango's Python core foundation evaluates moving backend service responsibilities from TypeScript to Python. Customer function execution is a different boundary: today, customer integrations are authored, bundled, and executed as TypeScript/JavaScript with a Node runner and a JavaScript `nango` runtime SDK surface.
+The active `nango-py/` implementation will move selected backend service responsibilities from TypeScript to Python. Customer function execution is a different boundary: today, customer integrations are authored, bundled, and executed as TypeScript/JavaScript with a Node runner and a JavaScript `nango` runtime SDK surface.
 
 A future Python-native function runtime could let customers write Nango Functions in Python and could align function execution with a Python backend. However, that runtime would create a new customer-facing contract across deploy artifacts, SDK behavior, persistence, logs, lifecycle control, dependency isolation, and error semantics. It should be treated as a product/runtime design, not as an incidental part of the backend core migration.
 

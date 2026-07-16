@@ -1,0 +1,1 @@
+"""Auth flows domain: errors + OAuth2 URL builder + state encoding."""

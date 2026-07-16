@@ -1,0 +1,1 @@
+"""Auth bounded context: API-key authentication and authorization."""

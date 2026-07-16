@@ -1,0 +1,20 @@
+{
+    "scenario": "single_not_found",
+    "request": {
+        "method": "GET",
+        "path": "/connections/missing-conn",
+        "headers": { "Authorization": "Bearer {{secret_key}}" },
+        "query": { "provider_config_key": "github" }
+    },
+    "seed": {
+        "account": { "id": 1 },
+        "environment": { "id": 1, "account_id": 1 },
+        "customer_key": { "id": 10, "scopes": ["environment:connections:read"] },
+        "integration": { "id": 100, "unique_key": "github", "provider": "github", "environment_id": 1 }
+    },
+    "response": {
+        "status": 404,
+        "body": { "error": { "code": "not_found", "message": "Failed to find connection" } }
+    },
+    "notes": "Integration exists but no _nango_connections row for (connectionId, provider_config_key, environment_id)."
+}
