@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Nango{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="grid" style="margin-top: 1.5rem;">
+    <div class="card">
+        <h2>Integrations</h2>
+        <p style="font-size: 2rem; font-weight: bold;">{{ integrations_count }}</p>
+        <p style="color: #666;">Configured integrations</p>
+        <a href="/integrations" class="btn" style="margin-top: 1rem;">Manage</a>
+    </div>
+    <div class="card">
+        <h2>Connections</h2>
+        <p style="font-size: 2rem; font-weight: bold;">{{ connections_count }}</p>
+        <p style="color: #666;">Active connections</p>
+        <a href="/connections" class="btn" style="margin-top: 1rem;">Manage</a>
+    </div>
+    <div class="card">
+        <h2>Providers</h2>
+        <p style="font-size: 2rem; font-weight: bold;">{{ providers_count }}</p>
+        <p style="color: #666;">Available providers</p>
+        <a href="/providers" class="btn" style="margin-top: 1rem;">Browse</a>
+    </div>
+    <div class="card">
+        <h2>Sync Jobs</h2>
+        <p style="font-size: 2rem; font-weight: bold;">{{ jobs_count }}</p>
+        <p style="color: #666;">Jobs running</p>
+        <a href="/jobs" class="btn" style="margin-top: 1rem;">View</a>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 2rem;">
+    <h2>Recent Connections</h2>
+    {% if recent_connections %}
+    <table>
+        <thead>
+            <tr>
+                <th>Connection ID</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for conn in recent_connections %}
+            <tr>
+                <td>{{ conn.connection_id }}</td>
+                <td>{{ conn.provider }}</td>
+                <td><span class="status status-active">Active</span></td>
+                <td>{{ conn.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666;">No connections yet</p>
+    {% endif %}
+</div>
+{% endblock %}

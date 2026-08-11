@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Providers - Nango{% endblock %}
+
+{% block content %}
+<h1>Providers</h1>
+
+<div style="margin: 1.5rem 0;">
+    <h3>Categories</h3>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+        {% for cat in categories %}
+        <span class="category-tag">{{ cat }}</span>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="grid">
+    {% for p in providers %}
+    <div class="provider-card">
+        <h3>{{ p.display_name }}</h3>
+        <p style="color: #666; font-size: 0.875rem; margin-bottom: 0.5rem;">{{ p.name }}</p>
+        <p style="font-size: 0.75rem; margin-bottom: 0.5rem;"><strong>Auth:</strong> {{ p.auth_mode }}</p>
+        <div class="categories">
+            {% for cat in p.categories %}
+            <span class="category-tag">{{ cat }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

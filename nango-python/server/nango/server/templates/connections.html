@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Connections - Nango{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1>Connections</h1>
+    <button class="btn" onclick="document.getElementById('connectModal').style.display='block'">New Connection</button>
+</div>
+
+<div class="card">
+    {% if connections %}
+    <table>
+        <thead>
+            <tr>
+                <th>Connection ID</th>
+                <th>Provider</th>
+                <th>Config Key</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for conn in connections %}
+            <tr>
+                <td>{{ conn.connection_id }}</td>
+                <td>{{ conn.provider }}</td>
+                <td>{{ conn.provider_config_key }}</td>
+                <td>{{ conn.created_at }}</td>
+                <td>
+                    <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Test</button>
+                    <button class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666;">No connections yet. Create an integration first, then add a connection.</p>
+    {% endif %}
+</div>
+{% endblock %}

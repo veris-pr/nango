@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Integrations - Nango{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1>Integrations</h1>
+    <button class="btn" onclick="showAddModal()">Add Integration</button>
+</div>
+
+{% if error %}
+<div class="card" style="background: #f8d7da; border-color: #f5c6cb;">
+    <p style="color: #721c24;">{{ error }}</p>
+</div>
+{% endif %}
+
+{% if success %}
+<div class="card" style="background: #d4edda; border-color: #c3e6cb;">
+    <p style="color: #155724;">{{ success }}</p>
+</div>
+{% endif %}
+
+<div class="card">
+    {% if integrations %}
+    <table>
+        <thead>
+            <tr>
+                <th>Provider</th>
+                <th>Config Key</th>
+                <th>Client ID</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for int in integrations %}
+            <tr>
+                <td>{{ int.provider }}</td>
+                <td><code style="background: #f0f0f0; padding: 0.25rem 0.5rem; border-radius: 4px;">{{ int.provider_config_key }}</code></td>
+                <td>{{ int.oauth_client_id[:20] if int.oauth_client_id else '-' }}</td>
+                <td>{{ int.created_at }}</td>
+                <td>
+                    <a href="/integrations/{{ int.provider_config_key }}" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Manage</a>
+                    <form method="post" action="/integrations/delete" style="display: inline;">
+                        <input type="hidden" name="provider_config_key" value="{{ int.provider_config_key }}">
+                        <input type="hidden" name="environment_id" value="{{ environment_id }}">
+                        <button type="submit" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666;">No integrations configured yet. Add one to get started.</p>
+    {% endif %}
+</div>
+
+<div id="addModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);">
+    <div style="background: white; max-width: 500px; margin: 5rem auto; padding: 2rem; border-radius: 8px;">
+        <h2>Add Integration</h2>
+        <form method="post" action="/integrations/create" style="margin-top: 1rem;">
+            <div class="form-group">
+                <label>Provider</label>
+                <select name="provider" required onchange="updateProviderInfo()">
+                    <option value="">Select a provider...</option>
+                    {% for p in available_providers %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Integration ID (Config Key)</label>
+                <input type="text" name="provider_config_key" placeholder="e.g., my-integration" required>
+            </div>
+            <div class="form-group">
+                <label>Client ID</label>
+                <input type="text" name="oauth_client_id" placeholder="OAuth client ID">
+            </div>
+            <div class="form-group">
+                <label>Client Secret</label>
+                <input type="password" name="oauth_client_secret" placeholder="OAuth client secret">
+            </div>
+            <div class="form-group">
+                <label>Scopes (comma separated)</label>
+                <input type="text" name="scopes" placeholder="e.g., repo,user">
+            </div>
+            <input type="hidden" name="environment_id" value="{{ environment_id }}">
+            <button type="submit" class="btn">Create Integration</button>
+            <button type="button" class="btn btn-secondary" onclick="hideAddModal()">Cancel</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddModal() { document.getElementById('addModal').style.display = 'block'; }
+function hideAddModal() { document.getElementById('addModal').style.display = 'none'; }
+</script>
+{% endblock %}

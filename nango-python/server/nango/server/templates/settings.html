@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Nango{% endblock %}
+
+{% block content %}
+<h1>Settings</h1>
+
+<div class="card" style="margin-top: 1.5rem;">
+    <h2>Environment</h2>
+    <form>
+        <div class="form-group">
+            <label>Server URL</label>
+            <input type="text" value="http://localhost:3003" readonly>
+        </div>
+        <div class="form-group">
+            <label>Database URL</label>
+            <input type="password" value="postgresql://nango:nango@localhost:5432/nango" readonly>
+        </div>
+    </form>
+</div>
+
+<div class="card" style="margin-top: 1rem;">
+    <h2>API Keys</h2>
+    <div class="form-group">
+        <label>Secret Key</label>
+        <input type="text" value="nango_sk_..." readonly>
+        <button class="btn btn-secondary" style="margin-top: 0.5rem;">Regenerate</button>
+    </div>
+    <div class="form-group">
+        <label>Public Key</label>
+        <input type="text" value="nango_pk_..." readonly>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 1rem;">
+    <h2>Dashboard Auth</h2>
+    <div class="form-group">
+        <label>Username</label>
+        <input type="text" placeholder="admin">
+    </div>
+    <div class="form-group">
+        <label>Password</label>
+        <input type="password" placeholder="••••••••">
+    </div>
+    <button class="btn">Save</button>
+</div>
+{% endblock %}
